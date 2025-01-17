@@ -14,7 +14,7 @@ static char *itoa_hex(uint64_t n) {
     static char const UINT64_MAX_STR[] = "0xffffffffffffffff";
     static char result_data[sizeof(UINT64_MAX_STR)];
     char *result = result_data;
-    memset(result, 0, sizeof(result));
+    memset(result, 0, sizeof(result_data));
 
     static char PREFIX[] = "0x";
     strcpy(result, PREFIX);
@@ -77,6 +77,24 @@ void println(char const * const s) {
     print(NL);
 }
 
+void println_ptrs(void * const ptrs[], uint64_t const array_len) {
+    print("{ ");
+    bool first = true;
+    for (uint64_t i = 0; i < array_len; i++) {
+        if (ptrs[i] != NULL) {
+            if (!first) {
+                print(", ");
+            }
+            print("[");
+            print(itoa(i));
+            print("]: ");
+            print(itoa_hex((intptr_t)ptrs[i]));
+            first = false;
+        }
+    }
+    println(" }");   
+}
+
 struct malloc_state {
     uint32_t mutex;
     uint32_t flags;
@@ -93,7 +111,15 @@ struct malloc_state {
     uint64_t max_system_mem;
 };
 
-extern struct malloc_state main_arena;
+#define ARRAY_LEN(A) (sizeof(A) / sizeof(A[0]))
+
+struct malloc_state * const main_arena = (struct malloc_state *)0x7ffff7f8eac0; // Pulled from gdb; won't work without setarch -R
+#define NFASTBINS (ARRAY_LEN(main_arena->fastbinsY))
+
+void print_malloc_state(struct malloc_state const * const m) {
+    print("fastbinsY: ");
+    println_ptrs(m->fastbinsY, NFASTBINS);
+}
 
 void print_chunk_containing(void const * const p) {
     void const * const chunk_base = (char const *)p - sizeof(void *);
@@ -108,7 +134,7 @@ void print_chunk_containing(void const * const p) {
 
     void const * const end_of_data = (char const *)p + data_size;
 
-    bool const is_topchunk = (intptr_t)chunk_base == (intptr_t)(main_arena.top);
+    bool const is_topchunk = (intptr_t)chunk_base == (intptr_t)(main_arena->top);
     bool const is_inuse = is_topchunk ? false : (*(uint64_t const *)((char const *)end_of_data + sizeof(void *))) & PREV_INUSE;
 
     print("    data address: ");
@@ -135,7 +161,48 @@ struct tcache_perthread_struct {
     void *entries[64];
 };
 
-extern struct tcache_perthread_struct *tcache;
+struct tcache_perthread_struct *tcache = (struct tcache_perthread_struct *)0x555555559010;
+#define TCACHE_SIZE (ARRAY_LEN(tcache->counts))
+
+void print_tcache(struct tcache_perthread_struct *tcache) {
+    print("entries: ");
+    println_ptrs(tcache->entries, ARRAY_LEN(tcache->entries));
+    print("counts:  { ");
+    bool first = true;
+    for (size_t i = 0; i < TCACHE_SIZE; i++) {
+        if (tcache->counts[i] == 0) {
+            continue;
+        }
+
+        if (!first) {
+            print(", ");
+        } else {
+            first = false;
+        }
+
+        print("[");
+        print(itoa(i));
+        print("]: ");
+        print(itoa(tcache->counts[i]));
+    }
+    println(" }");
+}
+
+
+void *tcache_next(void *p) {
+    return (void *)((((intptr_t)p) >> 12) ^ *(intptr_t *)p);
+}
+
+void print_tcache_entry(uint64_t n) {
+    void *list_entries[TCACHE_SIZE] = {};
+    void *curr = tcache->entries[n];
+    uint64_t i = 0;
+    for (; i < tcache->counts[n]; i++) {
+        list_entries[i] = curr;
+        curr = tcache_next(curr);
+    }
+    println_ptrs(list_entries, i);
+}
 
 uint64_t parse_base10(char const *s) {
     uint64_t result = 0;
@@ -154,21 +221,21 @@ uint64_t get_number(void) {
     return parse_base10(num);
 }
 
-#define ARRAY_LEN(A) (sizeof(A) / sizeof(A[0]))
-
 int main(void) {
-    void *chunks[4096] = {};
+    void *chunks[128] = {};
     uint64_t chunk_count = 0;
     while (true) {
-        println("0. Exit.");
+        uint64_t arg;
         println("1. Allocate a chunk.");
         println("2. Free a chunk.");
         println("3. Print a chunk.");
         println("4. List all chunks.");
-        uint64_t const num = get_number();
-        switch (num) {
+        println("5. Print the main arena.");
+        println("6. Print the tcache.");
+        println("7. Print a tcache list.");
+        switch (get_number()) {
         case 0:
-            return 0;
+            break;
         case 1:
             println("How big?");
             void *curr_chunk = malloc(get_number());
@@ -185,28 +252,40 @@ int main(void) {
             }
             break;
         case 2:
-            println("Free which one?");
-            free(chunks[get_number()]);
+            println("Free which chunk?");
+            arg = get_number();
+            if (arg > ARRAY_LEN(chunks)) {
+                println("Index out of bounds.");
+            } else {
+                free(chunks[arg]);
+            }
             break;
         case 3:
-            println("Print which one?");
-            print_chunk_containing(chunks[get_number()]);
+            println("Print which chunk?");
+            arg = get_number();
+            if (arg > ARRAY_LEN(chunks)) {
+                println("Index out of bounds.");
+            } else {
+                print_chunk_containing(chunks[arg]);
+            }
             break;
         case 4:
-            print("{ ");
-            for (uint64_t i = 0; i < ARRAY_LEN(chunks); i++) {
-                if (chunks[i] == NULL) {
-                    break;
-                }
-                if (i != 0) {
-                    print(", ");
-                }
-                print("[");
-                print(itoa(i));
-                print("]: ");
-                print(itoa_hex((intptr_t)chunks[i]));
+            println_ptrs(chunks, ARRAY_LEN(chunks));
+            break;
+        case 5:
+            print_malloc_state(main_arena);
+            break;
+        case 6:
+            print_tcache(tcache);
+            break;
+        case 7:
+            println("Print which tcache list?");
+            arg = get_number();
+            if (arg > NFASTBINS) {
+                println("Index out of bounds.");
+            } else {
+                print_tcache_entry(arg);
             }
-            println(" }");
             break;
         default:
             return -1;
