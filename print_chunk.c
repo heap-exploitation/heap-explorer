@@ -113,10 +113,12 @@ struct malloc_state {
 
 #define ARRAY_LEN(A) (sizeof(A) / sizeof(A[0]))
 
-struct malloc_state *const main_arena =
-    (struct malloc_state *)0x7ffff7f8eac0; // Pulled from gdb; won't work
-                                           // without setarch -R
-#define NFASTBINS (ARRAY_LEN(main_arena->fastbinsY))
+static intptr_t const MALLOC_OFFSET = 0xa7e50;
+static intptr_t const LIBC_BASE = (intptr_t)malloc - MALLOC_OFFSET;
+static intptr_t const MAIN_ARENA_OFFSET = 0x1eaac0;
+
+static struct malloc_state *const the_main_arena = (struct malloc_state *)(LIBC_BASE + MAIN_ARENA_OFFSET);
+#define NFASTBINS (ARRAY_LEN(the_main_arena->fastbinsY))
 
 void print_fastbins(struct malloc_state const *const m) {
     print("fastbins: ");
@@ -138,7 +140,7 @@ void print_chunk_containing(void const *const p) {
     void const *const end_of_data = (char const *)p + data_size;
 
     bool const is_topchunk =
-        (intptr_t)chunk_base == (intptr_t)(main_arena->top);
+        (intptr_t)chunk_base == (intptr_t)(the_main_arena->top);
     bool const is_inuse = is_topchunk
                               ? false
                               : (*(uint64_t const *)((char const *)end_of_data +
@@ -164,18 +166,20 @@ void print_chunk_containing(void const *const p) {
     println("");
 }
 
+#define TCACHE_SIZE (64)
 struct tcache_perthread_struct {
-    uint16_t counts[64];
-    void *entries[64];
+    uint16_t counts[TCACHE_SIZE];
+    void *entries[TCACHE_SIZE];
 };
 
-struct tcache_perthread_struct *tcache =
-    (struct tcache_perthread_struct *)0x555555559010;
-#define TCACHE_SIZE (ARRAY_LEN(tcache->counts))
+struct tcache_perthread_struct *get_the_tcache(void) {
+    intptr_t const TCACHE_PTR_OFFSET = 0x700;
+    return *(struct tcache_perthread_struct **)(LIBC_BASE + TCACHE_PTR_OFFSET);
+}
 
 void print_tcache(struct tcache_perthread_struct *tcache) {
     print("entries: ");
-    println_ptrs(tcache->entries, ARRAY_LEN(tcache->entries));
+    println_ptrs(tcache->entries, TCACHE_SIZE);
     print("counts:  { ");
     bool first = true;
     for (size_t i = 0; i < TCACHE_SIZE; i++) {
@@ -201,14 +205,19 @@ void *deobfuscate_next_link(void *p) {
     return (void *)((((intptr_t)p) >> 12) ^ *(intptr_t *)p);
 }
 
+#define MAX_FASTBIN_SIZE (128)
 void print_fastbin_list(void *head) {
-    void *list_entries[TCACHE_SIZE] = {};
+    static void *list_entries[MAX_FASTBIN_SIZE] = {};
     char *curr = (char *)head;
     uint64_t i = 0;
     while (curr != NULL) {
         list_entries[i] = curr;
-        curr = deobfuscate_next_link(curr + 0x10);
+        curr = deobfuscate_next_link(curr + CHUNK_HDR_SZ);
         i++;
+        if (i == MAX_FASTBIN_SIZE) {
+            println("Fastbin too full! This should never happen.");
+            exit(1);
+        }
     }
     println_ptrs(list_entries, i);
 }
@@ -304,11 +313,11 @@ int main(void) {
             break;
         }
         case 5: {
-            print_fastbins(main_arena);
+            print_fastbins(the_main_arena);
             break;
         }
         case 6: {
-            print_tcache(tcache);
+            print_tcache(get_the_tcache());
             break;
         }
         case 7: {
@@ -317,7 +326,7 @@ int main(void) {
             if (tcache_idx > TCACHE_SIZE) {
                 println("Index out of bounds.");
             } else {
-                print_tcache_list(tcache->entries[tcache_idx]);
+                print_tcache_list(get_the_tcache()->entries[tcache_idx]);
             }
             break;
         }
@@ -327,7 +336,7 @@ int main(void) {
             if (fastbin_idx > NFASTBINS) {
                 println("Index out of bounds.");
             } else {
-                print_fastbin_list(main_arena->fastbinsY[fastbin_idx]);
+                print_fastbin_list(the_main_arena->fastbinsY[fastbin_idx]);
             }
             break;
         }
