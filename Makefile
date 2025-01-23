@@ -3,13 +3,13 @@
 CC ?= gcc
 CFLAGS ?= -ggdb -O0 -Wall -Wextra -pedantic -std=c23
 
-all: print_chunk
+all: dump_heap
 
-print_chunk: print_chunk.c
+dump_heap: dump_heap.c
 	$(CC) $(CFLAGS) $^ -o $@
 
 clean:
-	rm -f print_chunk
+	rm -f dump_heap
 
-fmt: print_chunk.c
+fmt: dump_heap.c
 	clang-format --style='{IndentWidth: 4, AllowShortFunctionsOnASingleLine: false}' -i $^

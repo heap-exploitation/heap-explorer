@@ -72,6 +72,10 @@ static char *itoa_hex(uint64_t n) {
     return result - strlen(PREFIX);
 }
 
+static char *ptoa(void const *const p) {
+    return itoa_hex((intptr_t)p);
+}
+
 static char const UINT64_MAX_STR_DEC[] = "18446744073709551615";
 
 // Converts an int to a decimal string
@@ -110,25 +114,6 @@ static void println(char const *const s) {
     static char const NL[] = "\n";
     print(s);
     print(NL);
-}
-
-// Writes `array_len` 8-byte values from ptrs to stdout, in hex, with indices.
-static void println_ptrs(void *const ptrs[], uint64_t const array_len) {
-    print("{ ");
-    bool first = true;
-    for (uint64_t i = 0; i < array_len; i++) {
-        if (ptrs[i] != NULL) {
-            if (!first) {
-                print(", ");
-            }
-            print("[");
-            print(itoa(i));
-            print("]: ");
-            print(itoa_hex((intptr_t)ptrs[i]));
-            first = false;
-        }
-    }
-    println(" }");
 }
 
 // The glibc malloc_state struct, with some slight simplifications.
@@ -170,11 +155,15 @@ static struct malloc_state const *const the_main_arena =
     (struct malloc_state *)(LIBC_BASE + MAIN_ARENA_OFFSET);
 #define NFASTBINS (ARRAY_LEN(the_main_arena->fastbinsY))
 
+// Gets a chunk's data size.
+// Note that this is 8 less than its size field,
+// because the size itself is 8 bytes wide.
 static uint64_t get_chunk_data_size(void const *const chunk) {
     // We mask off the low 3 bits because they store metadata.
-    return (*(uint64_t const *)chunk & ~7ull) - 0x8;
+    return (*(uint64_t const *)chunk & ~7ull) - sizeof(size_t);
 }
 
+// Prints a chunk's data size.
 static void print_chunk_data_size(void const *const chunk) {
     uint64_t const size = get_chunk_data_size(chunk);
     print(", data size: ");
@@ -184,7 +173,7 @@ static void print_chunk_data_size(void const *const chunk) {
 // Takes a pointer to a heap chunk's size (not prev_size),
 // and dumps information about that chunk.
 static void print_chunk(void const *const chunk, char const *const msg) {
-    print(itoa_hex((intptr_t)chunk));
+    print(ptoa(chunk));
     print_chunk_data_size(chunk);
     print(" ");
     if (msg != NULL) {
@@ -272,6 +261,7 @@ static bool is_in_tcache(void const *const chunk) {
     return false;
 }
 
+// Prints all the chunks in the heap.
 static void print_all_chunks(void) {
     if (the_main_arena->top == NULL) {
         println("The heap is empty.");
@@ -336,6 +326,10 @@ static void free_chunk_by_index(uint64_t n) {
     }
 }
 
+// Returns the index of `chunk` in the heap.
+// i.e., if `chunk` is the first thing allocated, returns 1
+// (because of the bottom chunk), and if `chunk` is the top chunk,
+// returns (num_chunks-1).
 static uint64_t get_chunk_index(void const *const target_chunk) {
     void const *const last_chunk = get_last_chunk();
     void *curr_chunk = get_first_chunk();
@@ -350,39 +344,40 @@ static uint64_t get_chunk_index(void const *const target_chunk) {
         return i;
     } else {
         print("Couldn't find chunk at ");
-        print(itoa_hex((intptr_t)target_chunk));
+        print(ptoa(target_chunk));
         println(".");
         exit(1); // TODO: Figure out a better way to signal an error here.
     }
 }
 
-#define MAX_FASTBIN_SIZE (128)
 static void print_fastbin_list(void *head) {
-    static void *list_entries[MAX_FASTBIN_SIZE] = {};
-    char *curr = (char *)head;
+    char *curr = head;
     uint64_t i = 0;
+    print("{ ");
     while (curr != NULL) {
-        list_entries[i] = glibc_chunk2chunk(curr);
+        if (i != 0) {
+            print(" -> ");
+        }
+        print(ptoa(glibc_chunk2chunk(curr)));
         curr = deobfuscate_next_link(glibc_chunk2data(curr));
         i++;
-        if (i == MAX_FASTBIN_SIZE) {
-            println("Fastbin too full! This should never happen.");
-            exit(1);
-        }
     }
-    println_ptrs(list_entries, i);
+    println(" }");
 }
 
 static void print_tcache_list(void *head) {
-    void *list_entries[TCACHE_SIZE] = {};
     void *curr = head;
     uint64_t i = 0;
+    print("{ ");
     while (curr != NULL) {
-        list_entries[i] = data2chunk(curr);
+        if (i != 0) {
+            print(" -> ");
+        }
+        print(ptoa(data2chunk(curr)));
         curr = deobfuscate_next_link(curr);
         i++;
     }
-    println_ptrs(list_entries, i);
+    println(" }");
 }
 
 // Parses a decimal int
