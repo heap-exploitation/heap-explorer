@@ -11,9 +11,10 @@
 #include <string.h>
 #include <unistd.h>
 
-#define BLUE(s) ("\x1b[0;34m" s "\x1b[0m")
-#define PURPLE(s) ("\x1b[0;35m" s "\x1b[0m")
-#define GREEN(s) ("\x1b[0;32m" s "\x1b[0m")
+static char const BLUE[] = "\x1b[0;34m";
+static char const PURPLE[] = "\x1b[0;35m";
+static char const GREEN[] = "\x1b[0;32m";
+static char const CLEAR_COLOR[] = "\x1b[0m";
 
 // Takes a pointer to chunk's data,
 // returns a pointer to its size
@@ -164,7 +165,7 @@ static uint64_t get_chunk_data_size(void const *const chunk) {
 }
 
 // Prints a chunk's data size.
-static void print_chunk_data_size(void const *const chunk) {
+static void println_chunk_data_size(void const *const chunk) {
     uint64_t const size = get_chunk_data_size(chunk);
     print(", data size: ");
     print(itoa_hex(size));
@@ -172,12 +173,27 @@ static void print_chunk_data_size(void const *const chunk) {
 
 // Takes a pointer to a heap chunk's size (not prev_size),
 // and dumps information about that chunk.
-static void print_chunk(void const *const chunk, char const *const msg) {
+static void println_chunk(void const *const chunk, char const *const msg,
+                          int64_t const bin_index, char const *const color) {
     print(ptoa(chunk));
-    print_chunk_data_size(chunk);
+    println_chunk_data_size(chunk);
     print(" ");
+    if (color != NULL) {
+        print(color);
+    }
     if (msg != NULL) {
+        print("(");
         print(msg);
+    }
+    if (bin_index != -1) {
+        print(" ");
+        print(itoa(bin_index));
+    }
+    if (msg != NULL) {
+        print(")");
+    }
+    if (color != NULL) {
+        print(CLEAR_COLOR);
     }
     println("");
 }
@@ -228,37 +244,39 @@ static void *deobfuscate_next_link(void const *const p) {
     return (void *)((((intptr_t)p) >> 12) ^ *(intptr_t const *)p);
 }
 
-// Returns whether `chunk` is in a fastbin
-static bool is_in_fastbin(void const *const chunk) {
-    for (uint64_t i = 0; i < NFASTBINS; i++) {
+// If `chunk` is in a fastbin, returns which one.
+// Otherwise, returns -1
+static int64_t fastbin_lookup(void const *const chunk) {
+    for (int64_t i = 0; i < (int64_t)NFASTBINS; i++) {
         if (the_main_arena->fastbinsY[i] != NULL) {
             void const *curr = the_main_arena->fastbinsY[i];
             while (curr != NULL) {
                 if (glibc_chunk2chunk(curr) == chunk) {
-                    return true;
+                    return i;
                 }
                 curr = deobfuscate_next_link(glibc_chunk2data(curr));
             }
         }
     }
-    return false;
+    return -1;
 }
 
-// Returns whether `chunk` is in tcache.
-static bool is_in_tcache(void const *const chunk) {
+// If `chunk` is in a fastbin, returns which one.
+// Otherwise, returns -1
+static int64_t tcache_lookup(void const *const chunk) {
     struct tcache_perthread_struct const *const tcache = get_the_tcache();
-    for (int i = 0; i < TCACHE_SIZE; i++) {
-        if (tcache->counts[i] > 0) {
-            void *curr = tcache->entries[i];
+    for (int64_t i = 0; i < TCACHE_SIZE; i++) {
+        if (tcache->entries[i] != NULL) {
+            void const *curr = tcache->entries[i];
             while (curr != NULL) {
                 if (chunk == data2chunk(curr)) {
-                    return true;
+                    return i;
                 }
                 curr = deobfuscate_next_link(curr);
             }
         }
     }
-    return false;
+    return -1;
 }
 
 // Prints all the chunks in the heap.
@@ -275,17 +293,27 @@ static void print_all_chunks(void) {
         print("[");
         print(itoa(i));
         print("]:\t");
-        char *msg = NULL;
+        char const *msg = NULL;
+        char const *color = NULL;
+        int64_t idx = -1;
+        int const tcache_idx = tcache_lookup(curr_chunk);
+        int const fastbin_idx = fastbin_lookup(curr_chunk);
         if (!is_in_use(curr_chunk)) {
-            msg = GREEN("(free)");
+            msg = "free";
+            color = GREEN;
         } else if (i == 0) {
-            msg = PURPLE("(base chunk)");
-        } else if (is_in_tcache(curr_chunk)) {
-            msg = GREEN("(tcache)");
-        } else if (is_in_fastbin(curr_chunk)) {
-            msg = GREEN("(fastbin)");
+            msg = "base chunk";
+            color = PURPLE;
+        } else if (tcache_idx != -1) {
+            msg = "tcache";
+            color = GREEN;
+            idx = tcache_idx;
+        } else if (fastbin_idx != -1) {
+            msg = "fastbin";
+            color = GREEN;
+            idx = fastbin_idx;
         }
-        print_chunk(curr_chunk, msg);
+        println_chunk(curr_chunk, msg, idx, color);
         void const *const next_chunk = get_next_chunk(curr_chunk);
         curr_chunk = next_chunk;
         i++;
@@ -295,7 +323,7 @@ static void print_all_chunks(void) {
         print("[");
         print(itoa(i));
         print("]:\t");
-        print_chunk(last_chunk, BLUE("(top chunk)"));
+        println_chunk(last_chunk, "top chunk", -1, BLUE);
     } else {
         print("Heap corrupted!");
     }
