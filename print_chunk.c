@@ -13,6 +13,7 @@
 
 #define BLUE(s) ("\x1b[0;34m" s "\x1b[0m")
 #define PURPLE(s) ("\x1b[0;35m" s "\x1b[0m")
+#define GREEN(s) ("\x1b[0;32m" s "\x1b[0m")
 
 // Takes a pointer to chunk's data,
 // returns a pointer to its size
@@ -30,6 +31,10 @@ static void *chunk2data(void const *const chunk) {
 // returns a pointer to the next chunk's size.
 static void *glibc_chunk2chunk(void const *const glibc_chunk) {
     return (char *)glibc_chunk + sizeof(size_t);
+}
+
+static void *glibc_chunk2data(void const *const glibc_chunk) {
+    return (char *)glibc_chunk + 2 * sizeof(size_t);
 }
 
 // Converts an int to a hex string.
@@ -165,12 +170,6 @@ static struct malloc_state const *const the_main_arena =
     (struct malloc_state *)(LIBC_BASE + MAIN_ARENA_OFFSET);
 #define NFASTBINS (ARRAY_LEN(the_main_arena->fastbinsY))
 
-// Lists out the head of each fastbin
-static void print_fastbin_heads(struct malloc_state const *const m) {
-    print("fastbins: ");
-    println_ptrs(m->fastbinsY, NFASTBINS);
-}
-
 static uint64_t get_chunk_data_size(void const *const chunk) {
     // We mask off the low 3 bits because they store metadata.
     return (*(uint64_t const *)chunk & ~7ull) - 0x8;
@@ -228,8 +227,49 @@ static void *get_last_chunk(void) {
     return glibc_chunk2chunk(the_main_arena->top);
 }
 
+// Returns whether chunk's is inuse (according to the following chunk's
+// PREV_INUSE bit).
 static bool is_in_use(void const *const chunk) {
     return (*(uint64_t *)get_next_chunk(chunk)) & 1;
+}
+
+// Takes the address of a list link from tcache or fastbin,
+// and deobfuscates it. Equivalent to REVEAL_PTR from glibc.
+static void *deobfuscate_next_link(void const *const p) {
+    return (void *)((((intptr_t)p) >> 12) ^ *(intptr_t const *)p);
+}
+
+// Returns whether `chunk` is in a fastbin
+static bool is_in_fastbin(void const *const chunk) {
+    for (uint64_t i = 0; i < NFASTBINS; i++) {
+        if (the_main_arena->fastbinsY[i] != NULL) {
+            void const *curr = the_main_arena->fastbinsY[i];
+            while (curr != NULL) {
+                if (glibc_chunk2chunk(curr) == chunk) {
+                    return true;
+                }
+                curr = deobfuscate_next_link(glibc_chunk2data(curr));
+            }
+        }
+    }
+    return false;
+}
+
+// Returns whether `chunk` is in tcache.
+static bool is_in_tcache(void const *const chunk) {
+    struct tcache_perthread_struct const *const tcache = get_the_tcache();
+    for (int i = 0; i < TCACHE_SIZE; i++) {
+        if (tcache->counts[i] > 0) {
+            void *curr = tcache->entries[i];
+            while (curr != NULL) {
+                if (chunk == data2chunk(curr)) {
+                    return true;
+                }
+                curr = deobfuscate_next_link(curr);
+            }
+        }
+    }
+    return false;
 }
 
 static void print_all_chunks(void) {
@@ -247,9 +287,13 @@ static void print_all_chunks(void) {
         print("]:\t");
         char *msg = NULL;
         if (!is_in_use(curr_chunk)) {
-            msg = BLUE("(free)");
+            msg = GREEN("(free)");
         } else if (i == 0) {
             msg = PURPLE("(base chunk)");
+        } else if (is_in_tcache(curr_chunk)) {
+            msg = GREEN("(tcache)");
+        } else if (is_in_fastbin(curr_chunk)) {
+            msg = GREEN("(fastbin)");
         }
         print_chunk(curr_chunk, msg);
         void const *const next_chunk = get_next_chunk(curr_chunk);
@@ -312,26 +356,14 @@ static uint64_t get_chunk_index(void const *const target_chunk) {
     }
 }
 
-// Prints the heads of the tcache free lists
-static void print_tcache_heads(struct tcache_perthread_struct *tcache) {
-    print("entries: ");
-    println_ptrs(tcache->entries, TCACHE_SIZE);
-}
-
-// Takes the address of a list link from tcache or fastbin,
-// and deobfuscates it. Equivalent to REVEAL_PTR from glibc.
-static void *deobfuscate_next_link(void *p) {
-    return (void *)((((intptr_t)p) >> 12) ^ *(intptr_t *)p);
-}
-
 #define MAX_FASTBIN_SIZE (128)
 static void print_fastbin_list(void *head) {
     static void *list_entries[MAX_FASTBIN_SIZE] = {};
     char *curr = (char *)head;
     uint64_t i = 0;
     while (curr != NULL) {
-        list_entries[i] = curr;
-        curr = deobfuscate_next_link(curr + 0x10);
+        list_entries[i] = glibc_chunk2chunk(curr);
+        curr = deobfuscate_next_link(glibc_chunk2data(curr));
         i++;
         if (i == MAX_FASTBIN_SIZE) {
             println("Fastbin too full! This should never happen.");
@@ -346,7 +378,7 @@ static void print_tcache_list(void *head) {
     void *curr = head;
     uint64_t i = 0;
     while (curr != NULL) {
-        list_entries[i] = curr;
+        list_entries[i] = data2chunk(curr);
         curr = deobfuscate_next_link(curr);
         i++;
     }
@@ -410,10 +442,8 @@ int main(void) {
         println("1. Allocate chunk(s).");
         println("2. Free a chunk.");
         println("3. Print all chunks.");
-        println("4. Print the tcache heads.");
-        println("5. Print the fastbin heads.");
-        println("6. Print a tcache list.");
-        println("7. Print a fastbin list.");
+        println("4. Print a tcache list.");
+        println("5. Print a fastbin list.");
         print(PS1);
         switch (get_number()) {
         case 0: {
@@ -447,25 +477,23 @@ int main(void) {
             break;
         }
         case 4: {
-            print_tcache_heads(get_the_tcache());
-            break;
-        }
-        case 5: {
-            print_fastbin_heads(the_main_arena);
-            break;
-        }
-        case 6: {
+            struct tcache_perthread_struct const *const the_tcache =
+                get_the_tcache();
+            if (the_tcache == NULL) {
+                println("The tcache is uninitialized.");
+                break;
+            }
             println("Print which tcache list?");
             print(PS2);
             uint64_t tcache_idx = get_number();
             if (tcache_idx > TCACHE_SIZE) {
                 println("Index out of bounds.");
             } else {
-                print_tcache_list(get_the_tcache()->entries[tcache_idx]);
+                print_tcache_list(the_tcache->entries[tcache_idx]);
             }
             break;
         }
-        case 7: {
+        case 5: {
             println("Print which fastbin list?");
             print(PS2);
             uint64_t fastbin_idx = get_number();
