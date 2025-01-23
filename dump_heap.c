@@ -261,7 +261,7 @@ static int64_t fastbin_lookup(void const *const chunk) {
     return -1;
 }
 
-// If `chunk` is in a fastbin, returns which one.
+// If `chunk` is in tcache bin, returns which one.
 // Otherwise, returns -1
 static int64_t tcache_lookup(void const *const chunk) {
     struct tcache_perthread_struct const *const tcache = get_the_tcache();
