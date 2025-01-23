@@ -11,6 +11,27 @@
 #include <string.h>
 #include <unistd.h>
 
+#define BLUE(s) ("\x1b[0;34m" s "\x1b[0m")
+#define PURPLE(s) ("\x1b[0;35m" s "\x1b[0m")
+
+// Takes a pointer to chunk's data,
+// returns a pointer to its size
+static void *data2chunk(void const *const data) {
+    return (char *)data - sizeof(size_t);
+}
+
+// Takes a pointer to a chunk's size,
+// returns a pointer to its data
+static void *chunk2data(void const *const chunk) {
+    return (char *)chunk + sizeof(size_t);
+}
+
+// Takes a pointer to a glibc chunk struct (starting with PREV_SIZE),
+// returns a pointer to the next chunk's size.
+static void *glibc_chunk2chunk(void const *const glibc_chunk) {
+    return (char *)glibc_chunk + sizeof(size_t);
+}
+
 // Converts an int to a hex string.
 // Returns a pointer to static memory.
 static char *itoa_hex(uint64_t n) {
@@ -152,21 +173,24 @@ static void print_fastbin_heads(struct malloc_state const *const m) {
 
 static uint64_t get_chunk_data_size(void const *const chunk) {
     // We mask off the low 3 bits because they store metadata.
-    // We subtract 10 because the size includes the chunk
-    // header, but this unintuitive.
-    return (*(uint64_t const *)chunk & ~7ull) - 0x10;
+    return (*(uint64_t const *)chunk & ~7ull) - 0x8;
+}
+
+static void print_chunk_data_size(void const *const chunk) {
+    uint64_t const size = get_chunk_data_size(chunk);
+    print(", data size: ");
+    print(itoa_hex(size));
 }
 
 // Takes a pointer to a heap chunk's size (not prev_size),
 // and dumps information about that chunk.
-static void print_chunk(void const *const chunk) {
-    uint64_t const size = get_chunk_data_size(chunk);
-
+static void print_chunk(void const *const chunk, char const *const msg) {
     print(itoa_hex((intptr_t)chunk));
-    println(":");
-
-    print("    size: ");
-    print(itoa(size));
+    print_chunk_data_size(chunk);
+    print(" ");
+    if (msg != NULL) {
+        print(msg);
+    }
     println("");
 }
 
@@ -184,37 +208,108 @@ static struct tcache_perthread_struct *get_the_tcache(void) {
     return *(struct tcache_perthread_struct **)(LIBC_BASE + TCACHE_PTR_OFFSET);
 }
 
-static void print_top_chunk(void const *const chunk) {
-    uint64_t const size = get_chunk_data_size(chunk);
+// Takes a pointer to a chunk size, and returns a pointer
+// to the next chunk's size.
+static void *get_next_chunk(void const *const chunk) {
+    return (char *)chunk2data(chunk) + get_chunk_data_size(chunk);
+}
 
-    print(itoa_hex((intptr_t)chunk));
-    println(": (top chunk)");
+// Gets the first chunk on the heap.
+// This almost certainly contains the tcache structure.
+// If the heap is uninitialized, this will likely segfault.
+static void *get_first_chunk(void) {
+    return data2chunk(get_the_tcache());
+}
 
-    print("    data size: ");
-    print(itoa(size));
-    println("");
+// Gets the first chunk on the heap.
+// This almost certainly contains the tcache structure.
+// If the heap is uninitialized, this will likely segfault.
+static void *get_last_chunk(void) {
+    return glibc_chunk2chunk(the_main_arena->top);
+}
+
+static bool is_in_use(void const *const chunk) {
+    return (*(uint64_t *)get_next_chunk(chunk)) & 1;
 }
 
 static void print_all_chunks(void) {
-    // (Adding 8 to get to the chunk size)
     if (the_main_arena->top == NULL) {
         println("The heap is empty.");
         return;
     }
-    void const *const top_chunk = (char const *)(the_main_arena->top) + 0x8;
+    void const *const last_chunk = get_last_chunk();
+    void const *curr_chunk = get_first_chunk();
 
-    // It happens that tcache is the first thing on the heap.
-    // We use that to get the base of the heap.
-    // (Subtracting 8 to get to the chunk size)
-    void const *curr_chunk = (char const *)get_the_tcache() - 0x8;
-
-    while (curr_chunk != top_chunk) {
-        print_chunk(curr_chunk);
-        curr_chunk =
-            (char const *)curr_chunk + get_chunk_data_size(curr_chunk) + 0x10;
+    uint64_t i = 0;
+    while (curr_chunk < last_chunk) {
+        print("[");
+        print(itoa(i));
+        print("]:\t");
+        char *msg = NULL;
+        if (!is_in_use(curr_chunk)) {
+            msg = BLUE("(free)");
+        } else if (i == 0) {
+            msg = PURPLE("(base chunk)");
+        }
+        print_chunk(curr_chunk, msg);
+        void const *const next_chunk = get_next_chunk(curr_chunk);
+        curr_chunk = next_chunk;
+        i++;
     }
 
-    print_top_chunk(top_chunk);
+    if (curr_chunk == last_chunk) {
+        print("[");
+        print(itoa(i));
+        print("]:\t");
+        print_chunk(last_chunk, BLUE("(top chunk)"));
+    } else {
+        print("Heap corrupted!");
+    }
+}
+
+// Frees the `n`th chunk on the heap.
+static void free_chunk_by_index(uint64_t n) {
+    if (the_main_arena->top == NULL) {
+        println("The heap is empty.");
+        return;
+    }
+
+    void const *const last_chunk = get_last_chunk();
+    void *curr_chunk = get_first_chunk();
+
+    uint64_t i = 0;
+    while (curr_chunk != last_chunk && i < n) {
+        curr_chunk = get_next_chunk(curr_chunk);
+        i++;
+    }
+
+    if (i == n) {
+        free(chunk2data(curr_chunk));
+    } else {
+        print("Couldn't find chunk ");
+        print(itoa(n));
+        println(".");
+    }
+}
+
+static uint64_t get_chunk_index(void const *const target_chunk) {
+    void const *const last_chunk = get_last_chunk();
+    void *curr_chunk = get_first_chunk();
+
+    uint64_t i = 0;
+    while (curr_chunk != last_chunk && curr_chunk != target_chunk) {
+        curr_chunk = get_next_chunk(curr_chunk);
+        i++;
+    }
+
+    if (curr_chunk == target_chunk) {
+        return i;
+    } else {
+        print("Couldn't find chunk at ");
+        print(itoa_hex((intptr_t)target_chunk));
+        println(".");
+        exit(1); // TODO: Figure out a better way to signal an error here.
+    }
 }
 
 // Prints the heads of the tcache free lists
@@ -258,7 +353,7 @@ static void print_tcache_list(void *head) {
     println_ptrs(list_entries, i);
 }
 
-// Reads a base-10 int from stdin
+// Parses a decimal int
 static uint64_t parse_base10(char const *s) {
     uint64_t result = 0;
     while ('0' <= *s && *s <= '9') {
@@ -270,7 +365,7 @@ static uint64_t parse_base10(char const *s) {
     return result;
 }
 
-// Reads a hex int from stdin
+// Parses a hex int
 static uint64_t parse_base16(char const *s) {
     uint64_t result = 0;
     while (('0' <= *s && *s <= '9') || ('a' <= *s && *s <= 'f') ||
@@ -289,62 +384,70 @@ static uint64_t parse_base16(char const *s) {
     return result;
 }
 
+// Reads a decimal or hex int from stdin
 static uint64_t get_number(void) {
     char num[sizeof(UINT64_MAX_STR_DEC)] = {};
-    read(STDIN_FILENO, num, sizeof(num) - 1);
+    for (uint64_t i = 0; i < sizeof(num) - 1; i++) {
+        int const rc = read(STDIN_FILENO, num + i, 1);
+        if (rc <= 0) {
+            exit(rc);
+        }
+        if (num[i] == '\n') {
+            num[i] = '\0';
+            break;
+        }
+    }
     return num[0] == '0' && (num[1] == 'x' || num[1] == 'X')
                ? parse_base16(num + 2)
                : parse_base10(num);
 }
 
+static char const PS1[] = "> ";
+static char const PS2[] = ">> ";
+
 int main(void) {
-    void *chunks[128] = {};
-    uint64_t chunk_count = 0;
     while (true) {
         println("1. Allocate chunk(s).");
         println("2. Free a chunk.");
-        println("4. Print all chunks.");
+        println("3. Print all chunks.");
+        println("4. Print the tcache heads.");
         println("5. Print the fastbin heads.");
-        println("6. Print the tcache heads.");
-        println("7. Print a tcache list.");
-        println("8. Print a fastbin list.");
+        println("6. Print a tcache list.");
+        println("7. Print a fastbin list.");
+        print(PS1);
         switch (get_number()) {
         case 0: {
+            println("Command not recognized.");
             break;
         }
         case 1: {
             println("How many?");
+            print(PS2);
             uint64_t count = get_number();
             println("How big?");
+            print(PS2);
             uint64_t size = get_number();
             for (uint64_t i = 0; i < count; i++) {
-                void *curr_chunk = malloc(size);
-                bool is_already_there = false;
-                for (uint64_t j = 0; j < chunk_count; j++) {
-                    if ((intptr_t)chunks[i] == (intptr_t)curr_chunk) {
-                        is_already_there = true;
-                        break;
-                    }
-                }
-                if (!is_already_there) {
-                    chunks[chunk_count] = curr_chunk;
-                    chunk_count++;
-                }
+                void const *const chunk = data2chunk(malloc(size));
+                uint64_t chunk_idx = get_chunk_index(chunk);
+                print("-> [");
+                print(itoa(chunk_idx));
+                println("]");
             }
             break;
         }
         case 2: {
             println("Free which chunk?");
-            uint64_t chunk_idx = get_number();
-            if (chunk_idx > ARRAY_LEN(chunks)) {
-                println("Index out of bounds.");
-            } else {
-                free(chunks[chunk_idx]);
-            }
+            print(PS2);
+            free_chunk_by_index(get_number());
+            break;
+        }
+        case 3: {
+            print_all_chunks();
             break;
         }
         case 4: {
-            print_all_chunks();
+            print_tcache_heads(get_the_tcache());
             break;
         }
         case 5: {
@@ -352,11 +455,8 @@ int main(void) {
             break;
         }
         case 6: {
-            print_tcache_heads(get_the_tcache());
-            break;
-        }
-        case 7: {
             println("Print which tcache list?");
+            print(PS2);
             uint64_t tcache_idx = get_number();
             if (tcache_idx > TCACHE_SIZE) {
                 println("Index out of bounds.");
@@ -365,8 +465,9 @@ int main(void) {
             }
             break;
         }
-        case 8: {
+        case 7: {
             println("Print which fastbin list?");
+            print(PS2);
             uint64_t fastbin_idx = get_number();
             if (fastbin_idx > NFASTBINS) {
                 println("Index out of bounds.");
@@ -380,5 +481,6 @@ int main(void) {
             break;
         }
         }
+        println("");
     }
 }
