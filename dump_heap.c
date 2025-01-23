@@ -295,7 +295,7 @@ static void print_all_chunks(void) {
         print("]:\t");
         char const *msg = NULL;
         char const *color = NULL;
-        int64_t idx = -1;
+        int64_t bin_idx = -1;
         int const tcache_idx = tcache_lookup(curr_chunk);
         int const fastbin_idx = fastbin_lookup(curr_chunk);
         if (!is_in_use(curr_chunk)) {
@@ -307,13 +307,13 @@ static void print_all_chunks(void) {
         } else if (tcache_idx != -1) {
             msg = "tcache";
             color = GREEN;
-            idx = tcache_idx;
+            bin_idx = tcache_idx;
         } else if (fastbin_idx != -1) {
             msg = "fastbin";
             color = GREEN;
-            idx = fastbin_idx;
+            bin_idx = fastbin_idx;
         }
-        println_chunk(curr_chunk, msg, idx, color);
+        println_chunk(curr_chunk, msg, bin_idx, color);
         void const *const next_chunk = get_next_chunk(curr_chunk);
         curr_chunk = next_chunk;
         i++;
