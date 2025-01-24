@@ -457,10 +457,14 @@ static uint64_t get_number(void) {
                : parse_base10(num);
 }
 
-static char const PS1[] = "> ";
-static char const PS2[] = ">> ";
+static bool is_mmapped(void const *const chunk) {
+    return (*(uint64_t *)chunk) & 2;
+}
 
 int main(void) {
+    static char const PS1[] = "> ";
+    static char const PS2[] = ">> ";
+
     while (true) {
         println("1. Allocate chunk(s).");
         println("2. Free a chunk.");
@@ -482,9 +486,13 @@ int main(void) {
             uint64_t size = get_number();
             for (uint64_t i = 0; i < count; i++) {
                 void const *const chunk = data2chunk(malloc(size));
-                uint64_t chunk_idx = get_chunk_index(chunk);
                 print("-> [");
-                print(itoa(chunk_idx));
+                if (!is_mmapped(chunk)) {
+                    uint64_t chunk_idx = get_chunk_index(chunk);
+                    print(itoa(chunk_idx));
+                } else {
+                    print("mmapped");
+                }
                 println("]");
             }
             break;
