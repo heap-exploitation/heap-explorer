@@ -165,7 +165,7 @@ static uint64_t get_chunk_data_size(void const *const chunk) {
 }
 
 // Prints a chunk's data size.
-static void println_chunk_data_size(void const *const chunk) {
+static void print_chunk_data_size(void const *const chunk) {
     uint64_t const size = get_chunk_data_size(chunk);
     print(", data size: ");
     print(itoa_hex(size));
@@ -173,10 +173,10 @@ static void println_chunk_data_size(void const *const chunk) {
 
 // Takes a pointer to a heap chunk's size (not prev_size),
 // and dumps information about that chunk.
-static void println_chunk(void const *const chunk, char const *const msg,
+static void print_chunk(void const *const chunk, char const *const msg,
                           int64_t const bin_index, char const *const color) {
     print(ptoa(chunk));
-    println_chunk_data_size(chunk);
+    print_chunk_data_size(chunk);
     print(" ");
     if (color != NULL) {
         print(color);
@@ -195,6 +195,15 @@ static void println_chunk(void const *const chunk, char const *const msg,
     if (color != NULL) {
         print(CLEAR_COLOR);
     }
+    /*
+    print("\n| ");
+    size_t const CHUNK_DATA_PREVIEW_LEN = 16;
+    for (size_t i = 0; i < CHUNK_DATA_PREVIEW_LEN; i++) {
+        print(byte_to_hex_ascii(*((char const *)chunk2data(chunk) + i)));
+        print(" ");
+    }
+    print("|");
+    */
     println("");
 }
 
@@ -279,6 +288,25 @@ static int64_t tcache_lookup(void const *const chunk) {
     return -1;
 }
 
+static uint64_t const NBINS = 127; // Pulled from GDB
+static int64_t bin_lookup(void const *const chunk) {
+    for (uint64_t i = 0; i < NBINS; i++) {
+        void const *const head = the_main_arena->bins[i * 2];
+        void const *const head_addr = &(the_main_arena->bins[i * 2]);
+        if (head == NULL) {
+            continue;
+        }
+        void const *curr = head;
+        while (curr != head_addr) { // TODO: this is wrong
+            if (chunk == glibc_chunk2chunk(curr)) {
+                return i;
+            }
+            curr = *(void **)glibc_chunk2data(curr);
+        }
+    }
+    return -1;
+}
+
 // Prints all the chunks in the heap.
 static void print_all_chunks(void) {
     if (the_main_arena->top == NULL) {
@@ -301,6 +329,7 @@ static void print_all_chunks(void) {
         if (!is_in_use(curr_chunk)) {
             msg = "free";
             color = GREEN;
+            bin_idx = bin_lookup(curr_chunk);
         } else if (i == 0) {
             msg = "base chunk";
             color = PURPLE;
@@ -313,7 +342,7 @@ static void print_all_chunks(void) {
             color = GREEN;
             bin_idx = fastbin_idx;
         }
-        println_chunk(curr_chunk, msg, bin_idx, color);
+        print_chunk(curr_chunk, msg, bin_idx, color);
         void const *const next_chunk = get_next_chunk(curr_chunk);
         curr_chunk = next_chunk;
         i++;
@@ -323,7 +352,7 @@ static void print_all_chunks(void) {
         print("[");
         print(itoa(i));
         print("]:\t");
-        println_chunk(last_chunk, "top chunk", -1, BLUE);
+        print_chunk(last_chunk, "top chunk", -1, BLUE);
     } else {
         print("Heap corrupted!");
     }
@@ -358,11 +387,11 @@ static void free_chunk_by_index(uint64_t n) {
 // i.e., if `chunk` is the first thing allocated, returns 1
 // (because of the bottom chunk), and if `chunk` is the top chunk,
 // returns (num_chunks-1).
-static uint64_t get_chunk_index(void const *const target_chunk) {
+static int64_t get_chunk_index(void const *const target_chunk) {
     void const *const last_chunk = get_last_chunk();
     void *curr_chunk = get_first_chunk();
 
-    uint64_t i = 0;
+    int64_t i = 0;
     while (curr_chunk != last_chunk && curr_chunk != target_chunk) {
         curr_chunk = get_next_chunk(curr_chunk);
         i++;
@@ -371,15 +400,44 @@ static uint64_t get_chunk_index(void const *const target_chunk) {
     if (curr_chunk == target_chunk) {
         return i;
     } else {
-        print("Couldn't find chunk at ");
-        print(ptoa(target_chunk));
-        println(".");
-        exit(1); // TODO: Figure out a better way to signal an error here.
+        return -1;
     }
 }
 
-static void print_fastbin_list(void *head) {
-    char *curr = head;
+static void print_bin_list(uint64_t const bin_idx) {
+    if (bin_idx >= NBINS) {
+        println("Index out of bounds.");
+        return;
+    }
+
+    void const *const head = data2chunk(the_main_arena->bins + bin_idx * 2);
+    void const *const head_link = *(void **)chunk2data(head);
+    if (head_link == NULL) {
+        println("The bins are uninitialized.");
+        return;
+    }
+
+    void const *curr = glibc_chunk2chunk(head_link);
+    uint64_t i = 0;
+    print("{ ");
+    while (curr != head) {
+        if (i != 0) {
+            print(" -> ");
+        }
+        print(ptoa(curr));
+        curr = glibc_chunk2chunk(*(void **)chunk2data(curr));
+        i++;
+    }
+    println(" }");
+}
+
+static void print_fastbin_list(uint64_t const fastbin_idx) {
+    if (fastbin_idx >= NFASTBINS) {
+        println("Index out of bounds.");
+        return;
+    }
+    void const *const head = the_main_arena->fastbinsY[fastbin_idx];
+    void const *curr = head;
     uint64_t i = 0;
     print("{ ");
     while (curr != NULL) {
@@ -393,8 +451,20 @@ static void print_fastbin_list(void *head) {
     println(" }");
 }
 
-static void print_tcache_list(void *head) {
-    void *curr = head;
+static void print_tcache_list(uint64_t const tcache_idx) {
+    if (tcache_idx >= TCACHE_SIZE) {
+        println("Index out of bounds.");
+        return;
+    }
+
+    struct tcache_perthread_struct const *const the_tcache = get_the_tcache();
+    if (the_tcache == NULL) {
+        println("The tcache is uninitialized.");
+        return;
+    }
+
+    void const *const head = the_tcache->entries[tcache_idx];
+    void const *curr = head;
     uint64_t i = 0;
     print("{ ");
     while (curr != NULL) {
@@ -471,6 +541,7 @@ int main(void) {
         println("3. Print all chunks.");
         println("4. Print a tcache list.");
         println("5. Print a fastbin list.");
+        println("6. Print a bin list.");
         print(PS1);
         switch (get_number()) {
         case 0: {
@@ -488,7 +559,11 @@ int main(void) {
                 void const *const chunk = data2chunk(malloc(size));
                 print("-> [");
                 if (!is_mmapped(chunk)) {
-                    uint64_t chunk_idx = get_chunk_index(chunk);
+                    int64_t const chunk_idx = get_chunk_index(chunk);
+                    if (chunk_idx == -1) {
+                        println("Couldn't find freshly-allocated, non-mmapped chunk!");
+                        exit(1);
+                    }
                     print(itoa(chunk_idx));
                 } else {
                     print("mmapped");
@@ -508,31 +583,21 @@ int main(void) {
             break;
         }
         case 4: {
-            struct tcache_perthread_struct const *const the_tcache =
-                get_the_tcache();
-            if (the_tcache == NULL) {
-                println("The tcache is uninitialized.");
-                break;
-            }
             println("Print which tcache list?");
             print(PS2);
-            uint64_t tcache_idx = get_number();
-            if (tcache_idx > TCACHE_SIZE) {
-                println("Index out of bounds.");
-            } else {
-                print_tcache_list(the_tcache->entries[tcache_idx]);
-            }
+            print_tcache_list(get_number());
             break;
         }
         case 5: {
             println("Print which fastbin list?");
             print(PS2);
-            uint64_t fastbin_idx = get_number();
-            if (fastbin_idx > NFASTBINS) {
-                println("Index out of bounds.");
-            } else {
-                print_fastbin_list(the_main_arena->fastbinsY[fastbin_idx]);
-            }
+            print_fastbin_list(get_number());
+            break;
+        }
+        case 6: {
+            println("Print which bin list?");
+            print(PS2);
+            print_bin_list(get_number());
             break;
         }
         default: {
