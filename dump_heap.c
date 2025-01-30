@@ -288,20 +288,21 @@ static int64_t tcache_lookup(void const *const chunk) {
     return -1;
 }
 
-static uint64_t const NBINS = 127; // Pulled from GDB
+static int64_t const NBINS = 127; // Pulled from GDB
 static int64_t bin_lookup(void const *const chunk) {
-    for (uint64_t i = 0; i < NBINS; i++) {
-        void const *const head = the_main_arena->bins[i * 2];
-        void const *const head_addr = &(the_main_arena->bins[i * 2]);
-        if (head == NULL) {
+    for (int64_t i = 0; i < NBINS; i++) {
+        void const *const head = data2chunk(the_main_arena->bins + i * 2);
+        void const *const head_link = *(void **)chunk2data(head);
+        if (head_link == NULL) {
             continue;
         }
-        void const *curr = head;
-        while (curr != head_addr) { // TODO: this is wrong
-            if (chunk == glibc_chunk2chunk(curr)) {
+
+        void const *curr = glibc_chunk2chunk(head_link);
+        while (curr != head) {
+            if (curr == chunk) {
                 return i;
             }
-            curr = *(void **)glibc_chunk2data(curr);
+            curr = glibc_chunk2chunk(*(void **)chunk2data(curr));
         }
     }
     return -1;
@@ -404,7 +405,7 @@ static int64_t get_chunk_index(void const *const target_chunk) {
     }
 }
 
-static void print_bin_list(uint64_t const bin_idx) {
+static void print_bin_list(int64_t const bin_idx) {
     if (bin_idx >= NBINS) {
         println("Index out of bounds.");
         return;
