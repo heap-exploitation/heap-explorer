@@ -137,8 +137,8 @@ struct malloc_state {
 
 #define ARRAY_LEN(A) (sizeof(A) / sizeof(A[0]))
 
-// The offset of malloc within glibc
-static intptr_t const MALLOC_OFFSET = 0xa7e50;
+// The offset of malloc within the glibc mapping
+static intptr_t const MALLOC_OFFSET = 0xa7d90;
 
 // The base address of glibc.
 // Note that this is not the base of the first entry from `info proc mappings`
