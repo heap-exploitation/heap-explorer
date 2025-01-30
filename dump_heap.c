@@ -174,7 +174,7 @@ static void print_chunk_data_size(void const *const chunk) {
 // Takes a pointer to a heap chunk's size (not prev_size),
 // and dumps information about that chunk.
 static void print_chunk(void const *const chunk, char const *const msg,
-                          int64_t const bin_index, char const *const color) {
+                        int64_t const bin_index, char const *const color) {
     print(ptoa(chunk));
     print_chunk_data_size(chunk);
     print(" ");
@@ -531,7 +531,7 @@ static bool is_mmapped(void const *const chunk) {
     return (*(uint64_t *)chunk) & 2;
 }
 
-int main(void) {
+void dump_heap(void) {
     static char const PS1[] = "> ";
     static char const PS2[] = ">> ";
 
@@ -561,7 +561,8 @@ int main(void) {
                 if (!is_mmapped(chunk)) {
                     int64_t const chunk_idx = get_chunk_index(chunk);
                     if (chunk_idx == -1) {
-                        println("Couldn't find freshly-allocated, non-mmapped chunk!");
+                        println("Couldn't find freshly-allocated, non-mmapped "
+                                "chunk!");
                         exit(1);
                     }
                     print(itoa(chunk_idx));
