@@ -11,6 +11,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "dump_heap.h"
+
 static char const BLUE[] = "\x1b[0;34m";
 static char const PURPLE[] = "\x1b[0;35m";
 static char const GREEN[] = "\x1b[0;32m";

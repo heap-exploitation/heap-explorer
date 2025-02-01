@@ -1,10 +1,7 @@
 #include <stdlib.h>
 
+#include "dump_heap.h"
+
 int main(void) {
-    malloc(10);
-    void *p = malloc(8000);
-    malloc(10);
-    free(p);
-    while (1)
-        ;
+    dump_heap();
 }

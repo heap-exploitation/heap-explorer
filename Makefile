@@ -8,8 +8,8 @@ all: test libdump_heap.so
 libdump_heap.so: dump_heap.c
 	$(CC) -shared $(CFLAGS) $^ -o $@
 
-test: test.c
-	$(CC) $(CFLAGS) test.c -o $@
+test: test.c dump_heap.c
+	$(CC) $(CFLAGS) $^ -o $@
 
 clean:
 	rm -f *.so *.o test
