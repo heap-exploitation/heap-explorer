@@ -1,1 +1,2 @@
-dump_heap
+libdump_heap.so
+test
