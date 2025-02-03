@@ -140,7 +140,7 @@ struct malloc_state {
 #define ARRAY_LEN(A) (sizeof(A) / sizeof(A[0]))
 
 // The offset of malloc within the glibc mapping
-static intptr_t const MALLOC_OFFSET = 0xa7d90;
+static intptr_t const MALLOC_OFFSET = 0xa9190;
 
 // The base address of glibc.
 // Note that this is not the base of the first entry from `info proc mappings`
@@ -150,7 +150,7 @@ static intptr_t const MALLOC_OFFSET = 0xa7d90;
 static intptr_t const LIBC_BASE = (intptr_t)malloc - MALLOC_OFFSET;
 
 // The offset of main_arena within glibc.
-static intptr_t const MAIN_ARENA_OFFSET = 0x1eaac0;
+static intptr_t const MAIN_ARENA_OFFSET = 0x1ebac0;
 
 // A pointer to main_arena in glibc. This is the
 // struct that stores most of the heap state.
