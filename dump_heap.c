@@ -310,6 +310,10 @@ static int64_t bin_lookup(void const *const chunk) {
     return -1;
 }
 
+static bool is_free(void const *const chunk) {
+    return !is_in_use(chunk) || tcache_lookup(chunk) != -1 || fastbin_lookup(chunk) != -1;
+}
+
 // Prints all the chunks in the heap.
 static void print_all_chunks(void) {
     if (the_main_arena->top == NULL) {
@@ -361,11 +365,10 @@ static void print_all_chunks(void) {
     }
 }
 
-// Frees the `n`th chunk on the heap.
-static void free_chunk_by_index(uint64_t n) {
+static void *get_chunk_by_index(uint64_t const n) {
     if (the_main_arena->top == NULL) {
         println("The heap is empty.");
-        return;
+        return NULL;
     }
 
     void const *const last_chunk = get_last_chunk();
@@ -377,13 +380,19 @@ static void free_chunk_by_index(uint64_t n) {
         i++;
     }
 
-    if (i == n) {
-        free(chunk2data(curr_chunk));
-    } else {
+    if (i != n) {
         print("Couldn't find chunk ");
         print(itoa(n));
         println(".");
+        return NULL;
+    } else {
+        return curr_chunk;
     }
+}
+
+// Frees the `n`th chunk on the heap.
+static void free_chunk(void *const chunk) {
+    free(chunk2data(chunk));
 }
 
 // Returns the index of `chunk` in the heap.
@@ -579,7 +588,15 @@ void dump_heap(void) {
         case 2: {
             println("Free which chunk?");
             print(PS2);
-            free_chunk_by_index(get_number());
+            uint64_t const chunk_idx = get_number();
+            void *const chunk = get_chunk_by_index(chunk_idx);
+            if (chunk != NULL) {
+                if (is_free(chunk)) {
+                    print("That would be a double free.");
+                } else {
+                    free_chunk(chunk);
+                }
+            }
             break;
         }
         case 3: {
