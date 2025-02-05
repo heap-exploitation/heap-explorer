@@ -1,3 +1,3 @@
 #pragma once
 
-[[noreturn]] void dump_heap(void);
+void dump_heap(void);

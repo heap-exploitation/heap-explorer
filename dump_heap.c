@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 
 #include "dump_heap.h"
 
@@ -34,6 +35,10 @@ static void *chunk2data(void const *const chunk) {
 // returns a pointer to the next chunk's size.
 static void *glibc_chunk2chunk(void const *const glibc_chunk) {
     return (char *)glibc_chunk + sizeof(size_t);
+}
+
+static void *chunk2glibc_chunk(void const *const chunk) {
+    return (char *)chunk - sizeof(size_t);
 }
 
 static void *glibc_chunk2data(void const *const glibc_chunk) {
@@ -128,7 +133,7 @@ struct malloc_state {
     void *fastbinsY[10];
     void *top;
     void *last_remainder;
-    void *bins[255];
+    void *bins[254];
     uint32_t binmap[4];
     void *next;
     void *next_free;
@@ -215,18 +220,17 @@ struct tcache_perthread_struct {
     void *entries[TCACHE_SIZE];
 };
 
-// Gets the address of the main tcache struct.
-// This can't be hardcoded, because tcache is on the
-// heap.
-static struct tcache_perthread_struct *get_the_tcache(void) {
-    intptr_t const TCACHE_PTR_OFFSET = 0x700;
-    return *(struct tcache_perthread_struct **)(LIBC_BASE + TCACHE_PTR_OFFSET);
-}
-
 // Takes a pointer to a chunk size, and returns a pointer
 // to the next chunk's size.
 static void *get_next_chunk(void const *const chunk) {
     return (char *)chunk2data(chunk) + get_chunk_data_size(chunk);
+}
+
+// Gets the address of the main tcache struct.
+// This can't be hardcoded, because tcache is on the
+// heap.
+static struct tcache_perthread_struct *get_the_tcache(void) {
+    return (struct tcache_perthread_struct *)glibc_chunk2data(((char *)chunk2glibc_chunk(get_next_chunk(glibc_chunk2chunk(the_main_arena->top))) - the_main_arena->system_mem));
 }
 
 // Gets the first chunk on the heap.
@@ -470,11 +474,6 @@ static void print_tcache_list(uint64_t const tcache_idx) {
     }
 
     struct tcache_perthread_struct const *const the_tcache = get_the_tcache();
-    if (the_tcache == NULL) {
-        println("The tcache is uninitialized.");
-        return;
-    }
-
     void const *const head = the_tcache->entries[tcache_idx];
     void const *curr = head;
     uint64_t i = 0;
@@ -628,4 +627,12 @@ void dump_heap(void) {
         }
         println("");
     }
+}
+
+static void dump_heap_sighandler(int) {
+    dump_heap();
+}
+
+static void __attribute__((constructor)) install_signal_handler(void) {
+    signal(SIGINT, dump_heap_sighandler);
 }

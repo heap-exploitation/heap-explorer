@@ -1,7 +1,7 @@
 .PHONY: all clean fmt
 
 CC ?= gcc
-CFLAGS ?= -ggdb -O0 -Wall -Wextra -pedantic -std=c23
+CFLAGS ?= -ggdb -O0 -Wall -Wextra -pedantic -std=c23 -fPIC
 
 all: test libdump_heap.so
 
