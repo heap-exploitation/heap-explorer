@@ -14,7 +14,7 @@
 #include <unistd.h>
 #include <signal.h>
 
-#include "dump_heap.h"
+#include "heap_explorer.h"
 
 static char const BLUE[] = "\x1b[0;34m";
 static char const PURPLE[] = "\x1b[0;35m";

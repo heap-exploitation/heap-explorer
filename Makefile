@@ -3,16 +3,16 @@
 CC ?= gcc
 CFLAGS ?= -ggdb -O0 -Wall -Wextra -pedantic -std=c23 -fPIC
 
-all: test libdump_heap.so
+all: playground libheap_explorer.so
 
-libdump_heap.so: dump_heap.c
+libheap_explorer.so: heap_explorer.c
 	$(CC) -shared $(CFLAGS) $^ -o $@
 
-test: test.c dump_heap.c
+playground: playground.c heap_explorer.c
 	$(CC) $(CFLAGS) $^ -o $@
 
 clean:
-	rm -f *.so *.o test
+	rm -f *.so *.o playground
 
 fmt:
 	clang-format --style='{IndentWidth: 4, AllowShortFunctionsOnASingleLine: false}' -i *.c

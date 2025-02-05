@@ -1,6 +1,6 @@
 #include <stdlib.h>
 
-#include "dump_heap.h"
+#include "heap_explorer.h"
 
 int main(void) {
     dump_heap();

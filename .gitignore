@@ -1,2 +1,2 @@
-libdump_heap.so
-test
+*.so
+playground
