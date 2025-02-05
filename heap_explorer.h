@@ -1,3 +1,3 @@
 #pragma once
 
-void dump_heap(void);
+void explore_heap(void);

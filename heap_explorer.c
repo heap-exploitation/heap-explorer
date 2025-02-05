@@ -544,7 +544,7 @@ static bool is_mmapped(void const *const chunk) {
     return (*(uint64_t *)chunk) & 2;
 }
 
-void dump_heap(void) {
+void explore_heap(void) {
     static char const PS1[] = "> ";
     static char const PS2[] = ">> ";
 
@@ -638,17 +638,17 @@ void dump_heap(void) {
     }
 }
 
-static void dump_heap_sighandler(int) {
-    dump_heap();
+static void explore_heap_sighandler(int) {
+    explore_heap();
 }
 
 static void __attribute__((constructor)) install_signal_handler(void) {
     struct sigaction sa;
-    sa.sa_handler = dump_heap_sighandler;
+    sa.sa_handler = explore_heap_sighandler;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = SA_RESTART;
     if (sigaction(SIGINT, &sa, NULL) == -1) {
-        println("libdump_heap: Couldn't install signal handler!");
+        println("libheap_explorer: Couldn't install signal handler!");
         _exit(EXIT_FAILURE);
     }
 }

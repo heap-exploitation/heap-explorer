@@ -3,5 +3,5 @@
 #include "heap_explorer.h"
 
 int main(void) {
-    dump_heap();
+    explore_heap();
 }
