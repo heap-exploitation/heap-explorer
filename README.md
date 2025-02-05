@@ -8,7 +8,7 @@ void explore_heap(void);
 `explore_heap` starts a REPL that allows the user to perform a few different actions, such as `free`ing chunks, `malloc`ing chunks, printing freelists, etc.
 
 `libheap_explorer` installs `explore_heap` as the `SIGINT` handler at load time, so you can do stuff like this:
-```bash
+```
 $ LD_PRELOAD=/the/path/to/libheap_explorer.so python3 -c 'while True: print("Dave and Dale are cool cats")'
 Dave and Dale are cool cats
 Dave and Dale are cool cats
