@@ -5,6 +5,8 @@
  * change.
  */
 
+#define _GNU_SOURCE
+
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -526,7 +528,7 @@ static uint64_t get_number(void) {
     for (uint64_t i = 0; i < sizeof(num) - 1; i++) {
         int const rc = read(STDIN_FILENO, num + i, 1);
         if (rc <= 0) {
-            exit(rc);
+            _exit(rc);
         }
         if (num[i] == '\n') {
             num[i] = '\0';
@@ -546,6 +548,8 @@ void dump_heap(void) {
     static char const PS1[] = "> ";
     static char const PS2[] = ">> ";
 
+    println("Welcome to the heap inspector!");
+
     while (true) {
         println("1. Allocate chunk(s).");
         println("2. Free a chunk.");
@@ -553,6 +557,7 @@ void dump_heap(void) {
         println("4. Print a tcache list.");
         println("5. Print a fastbin list.");
         println("6. Print a bin list.");
+        println("7. Exit the heap inspector.");
         print(PS1);
         switch (get_number()) {
         case 0: {
@@ -620,6 +625,10 @@ void dump_heap(void) {
             print_bin_list(get_number());
             break;
         }
+        case 7: {
+            println("Bye!");
+            return;
+        }
         default: {
             println("Unrecognized command.");
             break;
@@ -634,5 +643,12 @@ static void dump_heap_sighandler(int) {
 }
 
 static void __attribute__((constructor)) install_signal_handler(void) {
-    signal(SIGINT, dump_heap_sighandler);
+    struct sigaction sa;
+    sa.sa_handler = dump_heap_sighandler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+    if (sigaction(SIGINT, &sa, NULL) == -1) {
+        println("libdump_heap: Couldn't install signal handler!");
+        _exit(EXIT_FAILURE);
+    }
 }
