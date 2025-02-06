@@ -58,7 +58,7 @@ Welcome to the heap explorer!
 4. Print a tcache list.
 5. Print a fastbin list.
 6. Print a bin list.
-7. Exit the heap inspector.
+7. Exit the heap explorer.
 > 7
 Bye!
 Dave and Dale are cool cats
