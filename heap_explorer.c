@@ -552,7 +552,7 @@ void explore_heap(void) {
     static char const PS1[] = "> ";
     static char const PS2[] = ">> ";
 
-    println("\nWelcome to the heap explorer!");
+    println("\nWelcome to Heap Explorer!");
 
     while (true) {
         println("1. Allocate chunk(s).");
@@ -561,7 +561,7 @@ void explore_heap(void) {
         println("4. Print a tcache list.");
         println("5. Print a fastbin list.");
         println("6. Print a bin list.");
-        println("7. Exit the heap explorer.");
+        println("7. Exit Heap Explorer.");
         print(PS1);
         switch (get_number()) {
         case 0: {
