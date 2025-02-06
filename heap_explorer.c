@@ -7,12 +7,12 @@
 
 #define _GNU_SOURCE
 
+#include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <signal.h>
 
 #include "heap_explorer.h"
 
@@ -232,7 +232,10 @@ static void *get_next_chunk(void const *const chunk) {
 // This can't be hardcoded, because tcache is on the
 // heap.
 static struct tcache_perthread_struct *get_the_tcache(void) {
-    return (struct tcache_perthread_struct *)glibc_chunk2data(((char *)chunk2glibc_chunk(get_next_chunk(glibc_chunk2chunk(the_main_arena->top))) - the_main_arena->system_mem));
+    return (struct tcache_perthread_struct *)glibc_chunk2data(
+        ((char *)chunk2glibc_chunk(
+             get_next_chunk(glibc_chunk2chunk(the_main_arena->top))) -
+         the_main_arena->system_mem));
 }
 
 // Gets the first chunk on the heap.
@@ -317,7 +320,8 @@ static int64_t bin_lookup(void const *const chunk) {
 }
 
 static bool is_free(void const *const chunk) {
-    return !is_in_use(chunk) || tcache_lookup(chunk) != -1 || fastbin_lookup(chunk) != -1;
+    return !is_in_use(chunk) || tcache_lookup(chunk) != -1 ||
+           fastbin_lookup(chunk) != -1;
 }
 
 // Prints all the chunks in the heap.
