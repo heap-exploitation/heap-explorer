@@ -15,14 +15,14 @@ Dave and Dale are cool cats
 Dave and Dale are cool cats
 ...
 ^C
-Welcome to the heap explorer!
+Welcome to Heap Explorer!
 1. Allocate chunk(s).
 2. Free a chunk.
 3. Print all chunks.
 4. Print a tcache list.
 5. Print a fastbin list.
 6. Print a bin list.
-7. Exit the heap explorer.
+7. Exit Heap Explorer.
 > 3
 [0]:	0x5fe4fb8ef008, data size: 0x288 (base chunk)
 [1]:	0x5fe4fb8ef298, data size: 0x18 (tcache 0)
