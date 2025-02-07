@@ -33,16 +33,20 @@ static void *chunk2data(void const *const chunk) {
     return (char *)chunk + sizeof(size_t);
 }
 
-// Takes a pointer to a glibc chunk struct (starting with PREV_SIZE),
-// returns a pointer to the next chunk's size.
+// Takes a pointer to a chunk's prev_size,
+// returns a pointer to its size.
 static void *glibc_chunk2chunk(void const *const glibc_chunk) {
     return (char *)glibc_chunk + sizeof(size_t);
 }
 
+// Takes a pointer to a chunk's size,
+// returns a pointer to its prev_size.
 static void *chunk2glibc_chunk(void const *const chunk) {
     return (char *)chunk - sizeof(size_t);
 }
 
+// Takes a pointer to a chunk's size,
+// returns a pointer to its data.
 static void *glibc_chunk2data(void const *const glibc_chunk) {
     return (char *)glibc_chunk + 2 * sizeof(size_t);
 }
@@ -126,8 +130,8 @@ static void println(char const *const s) {
     print(NL);
 }
 
-// The glibc malloc_state struct, with some slight simplifications.
-// Should still be binary-compatible.
+// The glibc malloc_state struct, from glibc's malloc/malloc.c,
+// with some slight simplifications. Should still be binary-compatible.
 struct malloc_state {
     uint32_t mutex;
     uint32_t flags;
@@ -528,7 +532,7 @@ static uint64_t parse_base16(char const *s) {
 
 // Reads a decimal or hex int from stdin
 static uint64_t get_number(void) {
-    char num[sizeof(UINT64_MAX_STR_DEC)] = {};
+    char num[sizeof(UINT64_MAX_STR_DEC)] = {}; // we use UINT64_MAX_STR_DEC because it's longer than UINT64_MAX_STR_HEX
     for (uint64_t i = 0; i < sizeof(num) - 1; i++) {
         int const rc = read(STDIN_FILENO, num + i, 1);
         if (rc <= 0) {
