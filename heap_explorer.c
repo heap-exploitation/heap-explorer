@@ -186,7 +186,9 @@ static void print_chunk_data_size(void const *const chunk) {
 
 // Takes a pointer to a chunk's size (not prev_size),
 // and dumps information about that chunk.
-static void print_chunk(void const *const chunk, char const *const msg, int64_t const arena_index, int64_t const bin_index, char const *const color) {
+static void print_chunk(void const *const chunk, char const *const msg,
+                        int64_t const arena_index, int64_t const bin_index,
+                        char const *const color) {
     print(ptoa(chunk));
     print_chunk_data_size(chunk);
     print(" ");
@@ -232,10 +234,14 @@ static void *get_next_chunk(void const *const chunk) {
 }
 
 // Gets the address of the given arena's tcache struct.
-static struct tcache_perthread_struct *get_the_tcache(struct malloc_state const *const arena) {
+static struct tcache_perthread_struct *
+get_the_tcache(struct malloc_state const *const arena) {
     if (arena == the_main_arena) {
         // Just get the first chunk on this heap
-        return (struct tcache_perthread_struct *)glibc_chunk2data(((char *)chunk2glibc_chunk(get_next_chunk(glibc_chunk2chunk(arena->top))) - arena->system_mem));
+        return (struct tcache_perthread_struct *)glibc_chunk2data(
+            ((char *)chunk2glibc_chunk(
+                 get_next_chunk(glibc_chunk2chunk(arena->top))) -
+             arena->system_mem));
     } else {
         // Get the chunk after the chunk containing the arena
         return (struct tcache_perthread_struct *)((uint64_t *)(arena + 1) + 3);
@@ -271,7 +277,7 @@ struct lookup_result {
     int64_t arena;
 };
 
-static struct lookup_result const LOOKUP_FAILED = {.idx = -1, .arena=-1};
+static struct lookup_result const LOOKUP_FAILED = {.idx = -1, .arena = -1};
 
 bool lookup_failed(struct lookup_result lookup) {
     return memcmp(&lookup, &LOOKUP_FAILED, sizeof(struct lookup_result)) == 0;
@@ -283,7 +289,8 @@ bool lookup_succeeded(struct lookup_result lookup) {
 
 // If `chunk` is in a fastbin, returns which one.
 // Otherwise, returns -1
-static int64_t arena_fastbin_lookup(struct malloc_state const *const arena, void const *const chunk) {
+static int64_t arena_fastbin_lookup(struct malloc_state const *const arena,
+                                    void const *const chunk) {
     for (int64_t i = 0; i < (int64_t)NFASTBINS; i++) {
         if (arena->fastbinsY[i] != NULL) {
             void const *curr = arena->fastbinsY[i];
@@ -300,7 +307,8 @@ static int64_t arena_fastbin_lookup(struct malloc_state const *const arena, void
 
 // If `chunk` is in a tcache bin, returns which one.
 // Otherwise, returns -1
-static int64_t arena_tcache_lookup(struct malloc_state const *const arena, void const *const chunk) {
+static int64_t arena_tcache_lookup(struct malloc_state const *const arena,
+                                   void const *const chunk) {
     struct tcache_perthread_struct const *const tcache = get_the_tcache(arena);
     for (int64_t i = 0; i < TCACHE_SIZE; i++) {
         if (tcache->entries[i] != NULL) {
@@ -322,7 +330,7 @@ static struct lookup_result tcache_lookup(void const *const chunk) {
     do {
         int64_t i = arena_tcache_lookup(arena, chunk);
         if (i != -1) {
-            return (struct lookup_result){.idx = i, .arena=arena_idx};
+            return (struct lookup_result){.idx = i, .arena = arena_idx};
         }
         arena = arena->next;
         arena_idx++;
@@ -333,7 +341,8 @@ static struct lookup_result tcache_lookup(void const *const chunk) {
 // If `chunk` is in a normal (small/large/unsorted) bin, returns which one.
 // Otherwise, returns -1
 static int64_t const NBINS = ARRAY_LEN(the_main_arena->bins) / 2;
-static int64_t arena_bin_lookup(struct malloc_state const *const arena, void const *const chunk) {
+static int64_t arena_bin_lookup(struct malloc_state const *const arena,
+                                void const *const chunk) {
     for (int64_t i = 0; i < NBINS; i++) {
         void const *const head = data2chunk(arena->bins + i * 2);
         void const *const head_link = *(void **)chunk2data(head);
@@ -370,7 +379,8 @@ static void print_arena(struct malloc_state const *const arena) {
         char const *color = NULL;
         int64_t bin_idx = -1;
         int64_t arena_idx = -1;
-        struct lookup_result const tcache_lookup_result = tcache_lookup(curr_chunk);
+        struct lookup_result const tcache_lookup_result =
+            tcache_lookup(curr_chunk);
         int64_t fastbin_idx = arena_fastbin_lookup(arena, curr_chunk);
         if (!is_in_use(curr_chunk)) {
             msg = "free";
@@ -405,7 +415,8 @@ static void print_arena(struct malloc_state const *const arena) {
     }
 }
 
-static void *get_chunk_by_index(struct malloc_state const *const arena, uint64_t const n) {
+static void *get_chunk_by_index(struct malloc_state const *const arena,
+                                uint64_t const n) {
     if (arena->top == NULL) {
         println("The heap is empty.");
         return NULL;
@@ -439,7 +450,8 @@ static void free_chunk(void *const chunk) {
 // i.e., if `chunk` is the first thing allocated, returns 1
 // (because of the bottom chunk), and if `chunk` is the top chunk,
 // returns (num_chunks-1).
-static int64_t arena_chunk_lookup(struct malloc_state const *const arena, void const *const target_chunk) {
+static int64_t arena_chunk_lookup(struct malloc_state const *const arena,
+                                  void const *const target_chunk) {
     void const *const last_chunk = get_last_chunk(arena);
     void *curr_chunk = get_first_chunk(arena);
 
@@ -462,7 +474,7 @@ static struct lookup_result chunk_lookup(void const *const chunk) {
     do {
         int64_t i = arena_chunk_lookup(arena, chunk);
         if (i != -1) {
-            return (struct lookup_result){.idx = i, .arena=arena_idx};
+            return (struct lookup_result){.idx = i, .arena = arena_idx};
         }
         arena = arena->next;
         arena_idx++;
@@ -470,7 +482,8 @@ static struct lookup_result chunk_lookup(void const *const chunk) {
     return LOOKUP_FAILED;
 }
 
-static void print_bin_list(struct malloc_state const *const arena, int64_t const bin_idx) {
+static void print_bin_list(struct malloc_state const *const arena,
+                           int64_t const bin_idx) {
     if (bin_idx >= NBINS) {
         println("Index out of bounds.");
         return;
@@ -497,7 +510,8 @@ static void print_bin_list(struct malloc_state const *const arena, int64_t const
     println(" }");
 }
 
-static void print_fastbin_list(struct malloc_state const *const arena, uint64_t const fastbin_idx) {
+static void print_fastbin_list(struct malloc_state const *const arena,
+                               uint64_t const fastbin_idx) {
     if (fastbin_idx >= NFASTBINS) {
         println("Index out of bounds.");
         return;
@@ -517,13 +531,15 @@ static void print_fastbin_list(struct malloc_state const *const arena, uint64_t 
     println(" }");
 }
 
-static void print_tcache_list(struct malloc_state const *const arena, uint64_t const tcache_idx) {
+static void print_tcache_list(struct malloc_state const *const arena,
+                              uint64_t const tcache_idx) {
     if (tcache_idx >= TCACHE_SIZE) {
         println("Index out of bounds.");
         return;
     }
 
-    struct tcache_perthread_struct const *const the_tcache = get_the_tcache(arena);
+    struct tcache_perthread_struct const *const the_tcache =
+        get_the_tcache(arena);
     void const *const head = the_tcache->entries[tcache_idx];
     void const *curr = head;
     uint64_t i = 0;
@@ -572,7 +588,9 @@ static uint64_t parse_base16(char const *s) {
 
 // Reads a decimal or hex int from stdin
 static uint64_t get_number(void) {
-    char num[sizeof(UINT64_MAX_STR_DEC)] = {}; // we use UINT64_MAX_STR_DEC because it's longer than UINT64_MAX_STR_HEX
+    char num[sizeof(UINT64_MAX_STR_DEC)] =
+        {}; // we use UINT64_MAX_STR_DEC because it's longer than
+            // UINT64_MAX_STR_HEX
     for (uint64_t i = 0; i < sizeof(num) - 1; i++) {
         int const rc = read(STDIN_FILENO, num + i, 1);
         if (rc <= 0) {
@@ -631,9 +649,11 @@ void explore_heap(void) {
                 if (is_mmapped(chunk)) {
                     print("-> (mmapped)");
                 } else {
-                    struct lookup_result const lookup_result = chunk_lookup(chunk);
+                    struct lookup_result const lookup_result =
+                        chunk_lookup(chunk);
                     if (lookup_failed(lookup_result)) {
-                        println("Couldn't find the chunk we requested. Possibly, the allocation failed.");
+                        println("Couldn't find the chunk we requested. "
+                                "Possibly, the allocation failed.");
                         _exit(EXIT_FAILURE);
                     }
                     print("-> [arena ");
