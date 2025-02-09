@@ -5,10 +5,13 @@ CFLAGS ?= -ggdb -O0 -Wall -Wextra -pedantic -std=c23 -fPIC
 
 all: playground libheap_explorer.so
 
-libheap_explorer.so: heap_explorer.c
+heap_explorer.o: heap_explorer.c
+	$(CC) -c $(CFLAGS) $^ -o $@
+
+libheap_explorer.so: heap_explorer.o
 	$(CC) -shared $(CFLAGS) $^ -o $@
 
-playground: playground.c heap_explorer.c
+playground: playground.c heap_explorer.o
 	$(CC) $(CFLAGS) $^ -o $@
 
 clean:
