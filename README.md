@@ -69,7 +69,7 @@ Dave and Dale are cool cats
 
 ## Compatibility
 
-This library has been tested only on programs using Arch's glibc package, version `2.41+r2+g0a7c7a3e283a-1`.
+This library has been tested only on programs using Arch's glibc package, version `2.41+r6+gcf88351b685d-1`.
 It's pretty easy to port to other modern versions of glibc; just change the `*_OFFSET` constants in `heap_explorer.c`.
 
 ## Why should I use this over $OTHER_TOOL?

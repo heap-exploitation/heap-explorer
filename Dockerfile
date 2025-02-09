@@ -1,6 +1,6 @@
-FROM archlinux:base-20250202.0.304438
+FROM archlinux/archlinux:base-devel-20250209.0.306557
 
-RUN pacman -Syu --noconfirm gcc make && useradd --create-home user
+RUN useradd --create-home user
 
 USER user
 
