@@ -9,7 +9,6 @@
 #include "heap_explorer.h"
 
 void *wait_forever(void *) {
-    free(malloc(1));
     while (1) {
         sleep(UINT_MAX);
     }
