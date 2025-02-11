@@ -629,6 +629,19 @@ static bool is_mmapped(void const *const chunk) {
     return (*(uint64_t *)chunk) & 2;
 }
 
+static uint64_t arena_lookup(struct malloc_state const *const arena) {
+    struct malloc_state const *curr = the_main_arena;
+    int64_t arena_idx = 0;
+    do {
+        if (curr == arena) {
+            return arena_idx;
+        }
+        curr = curr->next;
+        arena_idx++;
+    } while (curr != the_main_arena);
+    _exit(EXIT_FAILURE);
+}
+
 static pid_t get_next_tid(void) {
     pid_t const my_tid = syscall(SYS_gettid);
     uint8_t dirents[4096];
@@ -691,17 +704,28 @@ void explore_heap(void) {
     static char const PS2[] = ">> ";
 
     println("\nWelcome to Heap Explorer!");
-    print("You are TID ");
-    print(itoa(syscall(SYS_gettid)));
-    println(".");
 
-    struct malloc_state const *arena =
+    struct malloc_state const *const my_arena =
         *(struct malloc_state const **)((uint8_t *)get_fs_base() - 0x30);
+    struct malloc_state const *arena = my_arena;
     if (arena == NULL) {
         arena = the_main_arena;
     }
 
     while (true) {
+        print("You are TID ");
+        print(itoa(syscall(SYS_gettid)));
+        print(", viewing arena ");
+        uint64_t arena_idx = arena_lookup(arena);
+        print(itoa(arena_idx));
+        if (arena_idx == 0) {
+            print(" (main_arena)");
+        }
+        if (arena == my_arena) {
+            print(" (this thread's arena)");
+        }
+        println("");
+
         println("1. Allocate chunk(s).");
         println("2. Free a chunk.");
         println("3. Print all chunks.");
