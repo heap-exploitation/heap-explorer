@@ -19,9 +19,10 @@
 
 #include "heap_explorer.h"
 
+static char const GREEN[] = "\x1b[0;32m";
+static char const YELLOW[] = "\x1b[0;33m";
 static char const BLUE[] = "\x1b[0;34m";
 static char const PURPLE[] = "\x1b[0;35m";
-static char const GREEN[] = "\x1b[0;32m";
 static char const CLEAR_COLOR[] = "\x1b[0m";
 
 // Takes a pointer to chunk's data,
@@ -199,7 +200,10 @@ static uint64_t get_chunk_data_size(void const *const chunk) {
 // Prints a chunk's data size.
 static void print_chunk_data_size(void const *const chunk) {
     uint64_t const size = get_chunk_data_size(chunk);
-    print(", data size: ");
+    print(", ");
+    print(PURPLE);
+    print("data size: ");
+    print(CLEAR_COLOR);
     print(itoa_hex(size));
 }
 
@@ -391,9 +395,11 @@ static void print_arena(struct malloc_state const *const arena) {
 
     uint64_t i = 0;
     while (curr_chunk < last_chunk) {
+        print(YELLOW);
         print("[");
         print(itoa(i));
         print("]:\t");
+        print(CLEAR_COLOR);
         char const *msg = NULL;
         char const *color = NULL;
         int64_t bin_idx = -1;
@@ -405,9 +411,6 @@ static void print_arena(struct malloc_state const *const arena) {
             msg = "free";
             color = GREEN;
             bin_idx = arena_bin_lookup(arena, curr_chunk);
-        } else if (i == 0) {
-            msg = "base chunk";
-            color = PURPLE;
         } else if (lookup_succeeded(tcache_lookup_result)) {
             msg = "tcache";
             color = GREEN;
@@ -425,9 +428,11 @@ static void print_arena(struct malloc_state const *const arena) {
     }
 
     if (curr_chunk == last_chunk) {
+        print(YELLOW);
         print("[");
         print(itoa(i));
         print("]:\t");
+        print(CLEAR_COLOR);
         print_chunk(last_chunk, "top chunk", -1, -1, BLUE);
     } else {
         print("Heap corrupted!");
