@@ -16,7 +16,7 @@ Dave and Dale are cool cats
 ...
 ^C
 Welcome to Heap Explorer!
-You are exploring arena 0.
+You are TID 821537, viewing arena 0 (main_arena)
 1. Allocate chunk(s).
 2. Free a chunk.
 3. Print all chunks.
@@ -24,38 +24,27 @@ You are exploring arena 0.
 5. Print a fastbin list.
 6. Print a bin list.
 7. Switch to next arena.
-8. Exit Heap Explorer.
+8. Switch to next thread.
+9. Exit Heap Explorer.
 > 3
-[0]:	0x617ba3f17008, data size: 0x288 (base chunk)
-[1]:	0x617ba3f17298, data size: 0x18 (arena 0, tcache 0)
-[2]:	0x617ba3f172b8, data size: 0x18
-[3]:	0x617ba3f172d8, data size: 0x78
-[4]:	0x617ba3f17358, data size: 0x318
-[5]:	0x617ba3f17678, data size: 0x68
-[6]:	0x617ba3f176e8, data size: 0x538
-[7]:	0x617ba3f17c28, data size: 0xd8
-[8]:	0x617ba3f17d08, data size: 0x1a8
-[9]:	0x617ba3f17eb8, data size: 0x68
-[10]:	0x617ba3f17f28, data size: 0x58
-[11]:	0x617ba3f17f88, data size: 0x78
-[12]:	0x617ba3f18008, data size: 0xa8
-[13]:	0x617ba3f180b8, data size: 0x68
-[14]:	0x617ba3f18128, data size: 0x48
-[15]:	0x617ba3f18178, data size: 0xb8
-[16]:	0x617ba3f18238, data size: 0x18
-[17]:	0x617ba3f18258, data size: 0xb8
-[18]:	0x617ba3f18318, data size: 0x18
-[19]:	0x617ba3f18338, data size: 0x28
-[20]:	0x617ba3f18368, data size: 0xd8
-[21]:	0x617ba3f18448, data size: 0xd8
-[22]:	0x617ba3f18528, data size: 0x28 (arena 0, tcache 1)
-[23]:	0x617ba3f18558, data size: 0x18
-[24]:	0x617ba3f18578, data size: 0xc8 (arena 0, tcache 11)
-[25]:	0x617ba3f18648, data size: 0x28 (arena 0, tcache 1)
-[26]:	0x617ba3f18678, data size: 0x18
-[27]:	0x617ba3f18698, data size: 0xc8 (arena 0, tcache 11)
+[0]:	0x55e6d9316008, data size: 0x288
+[1]:	0x55e6d9316298, data size: 0x18 (arena 0, tcache 0)
+[2]:	0x55e6d93162b8, data size: 0x18
+[3]:	0x55e6d93162d8, data size: 0x78
+[4]:	0x55e6d9316358, data size: 0x318
 ...
-You are exploring arena 0.
+[1614]:	0x55e6d93c7a28, data size: 0x2e8 (arena 0, tcache 45)
+[1615]:	0x55e6d93c7d18, data size: 0x128 (arena 0, tcache 17)
+[1616]:	0x55e6d93c7e48, data size: 0x3d8 (arena 0, tcache 60)
+[1617]:	0x55e6d93c8228, data size: 0x5c8
+[1618]:	0x55e6d93c87f8, data size: 0xb68 (free 92)
+[1619]:	0x55e6d93c9368, data size: 0x288 (arena 0, tcache 39)
+[1620]:	0x55e6d93c95f8, data size: 0x878 (free 0)
+[1621]:	0x55e6d93c9e78, data size: 0x2008
+[1622]:	0x55e6d93cbe88, data size: 0x308
+[1623]:	0x55e6d93cc198, data size: 0x1de68 (top chunk)
+
+You are TID 821551, viewing arena 0 (main_arena)
 1. Allocate chunk(s).
 2. Free a chunk.
 3. Print all chunks.
@@ -63,8 +52,9 @@ You are exploring arena 0.
 5. Print a fastbin list.
 6. Print a bin list.
 7. Switch to next arena.
-8. Exit Heap Explorer.
-> 8
+8. Switch to next thread.
+9. Exit Heap Explorer.
+> 9
 Dave and Dale are cool cats
 Dave and Dale are cool cats
 Dave and Dale are cool cats
