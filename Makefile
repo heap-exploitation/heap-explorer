@@ -1,7 +1,7 @@
 .PHONY: all clean fmt
 
 CC ?= gcc
-CFLAGS ?= -ggdb -O0 -Wall -Wextra -pedantic -std=c23 -fPIC
+CFLAGS ?= -ggdb -O0 -Wall -Wextra -Wpedantic -Wvla -std=c23 -fPIC
 
 all: playground libheap_explorer.so
 

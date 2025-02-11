@@ -7,11 +7,14 @@
 
 #define _GNU_SOURCE
 
+#include <asm/prctl.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 
 #include "heap_explorer.h"
@@ -24,31 +27,31 @@ static char const CLEAR_COLOR[] = "\x1b[0m";
 // Takes a pointer to chunk's data,
 // returns a pointer to its size
 static void *data2chunk(void const *const data) {
-    return (char *)data - sizeof(size_t);
+    return (uint8_t *)data - sizeof(size_t);
 }
 
 // Takes a pointer to a chunk's size,
 // returns a pointer to its data
 static void *chunk2data(void const *const chunk) {
-    return (char *)chunk + sizeof(size_t);
+    return (uint8_t *)chunk + sizeof(size_t);
 }
 
 // Takes a pointer to a chunk's prev_size,
 // returns a pointer to its size.
 static void *glibc_chunk2chunk(void const *const glibc_chunk) {
-    return (char *)glibc_chunk + sizeof(size_t);
+    return (uint8_t *)glibc_chunk + sizeof(size_t);
 }
 
 // Takes a pointer to a chunk's size,
 // returns a pointer to its prev_size.
 static void *chunk2glibc_chunk(void const *const chunk) {
-    return (char *)chunk - sizeof(size_t);
+    return (uint8_t *)chunk - sizeof(size_t);
 }
 
 // Takes a pointer to a chunk's size,
 // returns a pointer to its data.
 static void *glibc_chunk2data(void const *const glibc_chunk) {
-    return (char *)glibc_chunk + 2 * sizeof(size_t);
+    return (uint8_t *)glibc_chunk + 2 * sizeof(size_t);
 }
 
 // Converts an int to a hex string.
@@ -114,6 +117,22 @@ static char *itoa(uint64_t n) {
         result[strlen(result) - i - 1] = tmp;
     }
 
+    return result;
+}
+
+static int32_t atoi32(uint8_t const *s) {
+    while (*s == '0') {
+        s++;
+    }
+    int32_t result = 0;
+    while ('0' <= *s && *s <= '9') {
+        result *= 10;
+        result += *s - '0';
+        s++;
+    }
+    if (*s != '\0') {
+        _exit(EXIT_FAILURE);
+    }
     return result;
 }
 
@@ -230,7 +249,7 @@ struct tcache_perthread_struct {
 // Takes a pointer to chunk's size, and returns a pointer
 // to the next chunk's size.
 static void *get_next_chunk(void const *const chunk) {
-    return (char *)chunk2data(chunk) + get_chunk_data_size(chunk);
+    return (uint8_t *)chunk2data(chunk) + get_chunk_data_size(chunk);
 }
 
 // Gets the address of the given arena's tcache struct.
@@ -239,7 +258,7 @@ get_the_tcache(struct malloc_state const *const arena) {
     if (arena == the_main_arena) {
         // Just get the first chunk on this heap
         return (struct tcache_perthread_struct *)glibc_chunk2data(
-            ((char *)chunk2glibc_chunk(
+            ((uint8_t *)chunk2glibc_chunk(
                  get_next_chunk(glibc_chunk2chunk(arena->top))) -
              arena->system_mem));
     } else {
@@ -279,11 +298,11 @@ struct lookup_result {
 
 static struct lookup_result const LOOKUP_FAILED = {.idx = -1, .arena = -1};
 
-bool lookup_failed(struct lookup_result lookup) {
+static bool lookup_failed(struct lookup_result lookup) {
     return memcmp(&lookup, &LOOKUP_FAILED, sizeof(struct lookup_result)) == 0;
 }
 
-bool lookup_succeeded(struct lookup_result lookup) {
+static bool lookup_succeeded(struct lookup_result lookup) {
     return !lookup_failed(lookup);
 }
 
@@ -610,19 +629,79 @@ static bool is_mmapped(void const *const chunk) {
     return (*(uint64_t *)chunk) & 2;
 }
 
+static pid_t get_next_tid(void) {
+    pid_t const my_tid = syscall(SYS_gettid);
+    uint8_t dirents[4096];
+    int const procfs_fd = open("/proc/self/task", O_DIRECTORY);
+    uint64_t const bytes_read =
+        syscall(SYS_getdents64, procfs_fd, dirents, sizeof(dirents));
+    if (bytes_read == 0) {
+        _exit(EXIT_FAILURE);
+    }
+
+    uint64_t offset = 0;
+    bool found_a_thread = false;
+    uint64_t first_valid_offset = 0;
+    while (offset < bytes_read) {
+        uint16_t const d_reclen = *(
+            uint16_t *)(dirents + offset + sizeof(uint64_t) + sizeof(uint64_t));
+        uint8_t *const filename = dirents + offset + sizeof(uint64_t) +
+                                  sizeof(uint64_t) + sizeof(uint16_t) +
+                                  sizeof(uint8_t);
+        int32_t received_tid = 0;
+        if (strcmp((char *)filename, ".") != 0 &&
+            strcmp((char *)filename, "..") != 0) {
+            received_tid = atoi32(filename);
+            if (!found_a_thread) {
+                first_valid_offset = offset;
+                found_a_thread = true;
+            }
+        }
+        offset += d_reclen;
+        if (received_tid == my_tid) {
+            break;
+        }
+    }
+    if (offset > bytes_read) {
+        _exit(EXIT_FAILURE);
+    }
+    if (offset == bytes_read) { // Wrap back around to the beginning
+        offset = first_valid_offset;
+    }
+    offset += sizeof(uint64_t) + sizeof(uint64_t) + sizeof(uint16_t) +
+              sizeof(uint8_t);
+    pid_t result = atoi32(dirents + offset);
+    close(procfs_fd);
+    if (result == my_tid) {
+        return -1;
+    }
+    return result;
+}
+
+static void *get_fs_base(void) {
+    void *const fs_base;
+    syscall(SYS_arch_prctl, ARCH_GET_FS, &fs_base);
+    return fs_base;
+}
+
+static int const TRIGGER_SIGNAL = SIGINT;
+
 void explore_heap(void) {
     static char const PS1[] = "> ";
     static char const PS2[] = ">> ";
 
     println("\nWelcome to Heap Explorer!");
+    print("You are TID ");
+    print(itoa(syscall(SYS_gettid)));
+    println(".");
 
-    struct malloc_state const *arena = the_main_arena;
-    size_t arena_id = 0;
+    struct malloc_state const *arena =
+        *(struct malloc_state const **)((uint8_t *)get_fs_base() - 0x30);
+    if (arena == NULL) {
+        arena = the_main_arena;
+    }
 
     while (true) {
-        print("You are exploring arena ");
-        print(itoa(arena_id));
-        println(".");
         println("1. Allocate chunk(s).");
         println("2. Free a chunk.");
         println("3. Print all chunks.");
@@ -630,7 +709,8 @@ void explore_heap(void) {
         println("5. Print a fastbin list.");
         println("6. Print a bin list.");
         println("7. Switch to next arena.");
-        println("8. Exit Heap Explorer.");
+        println("8. Switch to next thread.");
+        println("9. Exit Heap Explorer.");
         print(PS1);
         switch (get_number()) {
         case 0: {
@@ -697,14 +777,19 @@ void explore_heap(void) {
         }
         case 7: {
             arena = arena->next;
-            if (arena == the_main_arena) {
-                arena_id = 0;
-            } else {
-                arena_id++;
-            }
             break;
         }
         case 8: {
+            pid_t const next_tid = get_next_tid();
+            if (next_tid != -1) {
+                syscall(SYS_tkill, next_tid, TRIGGER_SIGNAL);
+                return;
+            } else {
+                println("This is the only thread. Not switching.");
+            }
+            break;
+        }
+        case 9: {
             println("Bye!");
             return;
         }
@@ -726,7 +811,7 @@ static void __attribute__((constructor)) install_signal_handler(void) {
     sa.sa_handler = explore_heap_sighandler;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = SA_RESTART;
-    if (sigaction(SIGINT, &sa, NULL) == -1) {
+    if (sigaction(TRIGGER_SIGNAL, &sa, NULL) == -1) {
         println("libheap_explorer: Couldn't install signal handler!");
         _exit(EXIT_FAILURE);
     }
