@@ -122,9 +122,6 @@ static char *itoa(uint64_t n) {
 }
 
 static int32_t atoi32(uint8_t const *s) {
-    while (*s == '0') {
-        s++;
-    }
     int32_t result = 0;
     while ('0' <= *s && *s <= '9') {
         result *= 10;
@@ -690,9 +687,6 @@ static pid_t get_next_tid(void) {
               sizeof(uint8_t);
     pid_t result = atoi32(dirents + offset);
     close(procfs_fd);
-    if (result == my_tid) {
-        return -1;
-    }
     return result;
 }
 
@@ -710,8 +704,11 @@ void explore_heap(void) {
 
     println("\nWelcome to Heap Explorer!");
 
+    // This was determined by experiment in GDB.
+    // No idea about how portable this is.
     struct malloc_state const *const my_arena =
         *(struct malloc_state const **)((uint8_t *)get_fs_base() - 0x30);
+
     struct malloc_state const *arena = my_arena;
     if (arena == NULL) {
         arena = the_main_arena;
@@ -821,13 +818,8 @@ void explore_heap(void) {
         }
         case 8: {
             pid_t const next_tid = get_next_tid();
-            if (next_tid != -1) {
-                syscall(SYS_tkill, next_tid, TRIGGER_SIGNAL);
-                return;
-            } else {
-                println("This is the only thread. Not switching.");
-            }
-            break;
+            syscall(SYS_tkill, next_tid, TRIGGER_SIGNAL);
+            return;
         }
         case 9: {
             println("Bye!");
