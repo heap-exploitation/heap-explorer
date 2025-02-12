@@ -220,7 +220,7 @@ static void print_chunk(void const *const chunk, char const *const msg,
     }
 
     if (msg != NULL) {
-        print("(");
+        print("\t(");
         if (arena_index != -1) {
             print("arena ");
             print(itoa(arena_index));
@@ -731,15 +731,24 @@ void explore_heap(void) {
         }
         println("");
 
-        println("1. Allocate chunk(s).");
-        println("2. Free a chunk.");
-        println("3. Print all chunks.");
-        println("4. Print a tcache list.");
-        println("5. Print a fastbin list.");
-        println("6. Print a bin list.");
-        println("7. Switch to next arena.");
-        println("8. Switch to next thread.");
-        println("9. Exit Heap Explorer.");
+        static char const *OPTIONS[] = {
+            "Allocate chunk(s).",
+            "Free a chunk.",
+            "Print all chunks.",
+            "Print a tcache list.",
+            "Print a fastbin list.",
+            "Print a bin list.",
+            "Switch to next arena.",
+            "Switch to next thread.",
+            "Exit Heap Explorer."
+        };
+        for (size_t i = 0; i < ARRAY_LEN(OPTIONS); i++) {
+            print(BLUE);
+            print(itoa(i + 1));
+            print(". ");
+            print(CLEAR_COLOR);
+            println(OPTIONS[i]);
+        }
         print(PS1);
         switch (get_number()) {
         case 0: {
@@ -779,7 +788,9 @@ void explore_heap(void) {
             print(PS2);
             uint64_t const chunk_idx = get_number();
             void *const chunk = get_chunk_by_index(arena, chunk_idx);
-            free_chunk(chunk);
+            if (chunk != NULL) {
+                free_chunk(chunk);
+            }
             break;
         }
         case 3: {
