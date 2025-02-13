@@ -731,7 +731,7 @@ void explore_heap(void) {
         static char const *OPTIONS[] = {
             "Allocate chunk(s).",
             "Free a chunk.",
-            "Print all chunks.",
+            "Print this arena.",
             "Print a tcache list.",
             "Print a fastbin list.",
             "Print a bin list.",

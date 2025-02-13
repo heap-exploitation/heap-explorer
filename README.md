@@ -19,7 +19,7 @@ Welcome to Heap Explorer!
 You are TID 821537, viewing arena 0 (main_arena)
 1. Allocate chunk(s).
 2. Free a chunk.
-3. Print all chunks.
+3. Print this arena.
 4. Print a tcache list.
 5. Print a fastbin list.
 6. Print a bin list.
