@@ -55,6 +55,10 @@ static void *glibc_chunk2data(void const *const glibc_chunk) {
     return (uint8_t *)glibc_chunk + 2 * sizeof(size_t);
 }
 
+static bool is_in_skip_list(void const *const chunk) {
+    return ((void const* const *)chunk)[3] != NULL || ((void const* const *)chunk)[4] != NULL;
+}
+
 // Converts an int to a hex string.
 // Returns a pointer to static memory.
 static char *itoa_hex(uint64_t n) {
@@ -524,7 +528,13 @@ static void print_bin_list(struct malloc_state const *const arena,
         if (i != 0) {
             print(" -> ");
         }
+        if (is_in_skip_list(curr)) {
+            print(GREEN);
+        }
         print(ptoa(curr));
+        if (is_in_skip_list(curr)) {
+            print(CLEAR_COLOR);
+        }
         curr = glibc_chunk2chunk(*(void **)chunk2data(curr));
         i++;
     }
