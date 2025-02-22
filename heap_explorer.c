@@ -412,6 +412,14 @@ static void print_arena(struct malloc_state const *const arena) {
             msg = "free";
             color = GREEN;
             bin_idx = arena_bin_lookup(arena, curr_chunk);
+            if (bin_idx == 0) {
+                msg = "unsorted bin";
+                bin_idx = -1;
+            } else if (bin_idx < 63) {
+                msg = "smallbin";
+            } else {
+                msg = "largebin";
+            }
         } else if (lookup_succeeded(tcache_lookup_result)) {
             msg = "tcache";
             color = GREEN;
