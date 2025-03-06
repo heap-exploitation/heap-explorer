@@ -749,6 +749,7 @@ void explore_heap(void) {
         static char const *OPTIONS[] = {
             "Allocate chunk(s).",
             "Free a chunk.",
+            "Reallocate a chunk.",
             "Print this arena.",
             "Print a tcache list.",
             "Print a fastbin list.",
@@ -809,37 +810,67 @@ void explore_heap(void) {
             break;
         }
         case 3: {
-            print_arena(arena);
+            println("Reallocate which chunk?");
+            print(PS2);
+            uint64_t const chunk_idx = get_number();
+            void *const chunk = get_chunk_by_index(arena, chunk_idx);
+            if (chunk == NULL) {
+                break;
+            }
+            println("How big?");
+            print(PS2);
+            uint64_t size = get_number();
+            void *const result = realloc(chunk2data(chunk), size);
+            void const *const result_chunk = data2chunk(result);
+            if (is_mmapped(result_chunk)) {
+                print("-> (mmapped)");
+            } else {
+                struct lookup_result const lookup_result = chunk_lookup(result_chunk);
+                if (lookup_failed(lookup_result)) {
+                    println("Couldn't find the chunk we requested. "
+                            "Possibly, the reallocation failed.");
+                    _exit(EXIT_FAILURE);
+                }
+                print("-> [arena ");
+                print(itoa(lookup_result.arena));
+                print(", chunk ");
+                print(itoa(lookup_result.idx));
+                println("]");
+            }
             break;
         }
         case 4: {
+            print_arena(arena);
+            break;
+        }
+        case 5: {
             println("Print which tcache list?");
             print(PS2);
             print_tcache_list(arena, get_number());
             break;
         }
-        case 5: {
+        case 6: {
             println("Print which fastbin list?");
             print(PS2);
             print_fastbin_list(arena, get_number());
             break;
         }
-        case 6: {
+        case 7: {
             println("Print which bin list?");
             print(PS2);
             print_bin_list(arena, get_number());
             break;
         }
-        case 7: {
+        case 8: {
             arena = arena->next;
             break;
         }
-        case 8: {
+        case 9: {
             pid_t const next_tid = get_next_tid();
             syscall(SYS_tkill, next_tid, TRIGGER_SIGNAL);
             return;
         }
-        case 9: {
+        case 10: {
             println("Bye!");
             return;
         }
